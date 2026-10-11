@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - master
+    - release/*
+  pull_request:
+    branches:
+    - master
+    - release/*
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-go@v7
+      with:
+        go-version: stable
+    - name: go vet
+      run: go vet ./...
+    - name: staticcheck
+      # v0.8.1 cannot read Go 1.27.2 export data ("export data version 5 is greater than maximum
+      # supported version 4"). This master build from 2026-10-09 can; pin a tagged release again
+      # once one is published.
+      run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20261009230814-452d5bb86b45 -checks=all ./...
+    - name: goimports
+      run: |
+        out="$(go run golang.org/x/tools/cmd/goimports@v0.52.0 -l -local "$(go list -m)" .)"
+        if [ -n "$out" ]; then echo "goimports would change:"; echo "$out"; exit 1; fi
+    - name: govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+        - "1.23.x"
+        - "1.24.x"
+        - "1.25.x"
+        - oldstable
+        - stable
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: sqlx
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: sqlx
+          MYSQL_DATABASE: sqlx
+        ports:
+        - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -psqlx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      CGO_ENABLED: "1"
+      SQLX_POSTGRES_DSN: postgres://postgres:sqlx@localhost:5432/postgres?sslmode=disable
+      SQLX_MYSQL_DSN: root:sqlx@tcp(127.0.0.1:3306)/sqlx
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-go@v7
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Test with the race detector against Postgres, MySQL and SQLite
+      env:
+        SQLX_SQLITE_DSN: ${{ runner.temp }}/sqlx.db
+      run: |
+        go test -race -count=1 -v ./... 2>&1 | tee test.log
+        test "${PIPESTATUS[0]}" -eq 0
+    - name: Fail if a database was skipped
+      # init() prints "Disabling ..." and the schema tests then run zero rounds for that database.
+      run: |
+        if grep -n "Disabling" test.log; then exit 1; fi
+
+  ci-ok:
+    if: always()
+    needs:
+    - lint
+    - test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check required jobs
+      if: >-
+        contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        || contains(needs.*.result, 'skipped')
+      run: exit 1
