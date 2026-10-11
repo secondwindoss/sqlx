@@ -285,17 +285,20 @@ func (c *Conn) Rebind(query string) string {
 // transaction. Provided stmt can be either *sql.Stmt or *sqlx.Stmt.
 func (tx *Tx) StmtxContext(ctx context.Context, stmt interface{}) *Stmt {
 	var s *sql.Stmt
+	unsafe := tx.unsafe
 	switch v := stmt.(type) {
 	case Stmt:
 		s = v.Stmt
+		unsafe = unsafe || v.unsafe
 	case *Stmt:
 		s = v.Stmt
+		unsafe = unsafe || v.unsafe
 	case *sql.Stmt:
 		s = v
 	default:
 		panic(fmt.Sprintf("non-statement type %v passed to Stmtx", reflect.ValueOf(stmt).Type()))
 	}
-	return &Stmt{Stmt: tx.StmtContext(ctx, s), Mapper: tx.Mapper}
+	return &Stmt{Stmt: tx.StmtContext(ctx, s), unsafe: unsafe, Mapper: tx.Mapper}
 }
 
 // NamedStmtContext returns a version of the prepared statement which runs

@@ -482,17 +482,20 @@ func (tx *Tx) Preparex(query string) (*Stmt, error) {
 // stmt can be either *sql.Stmt or *sqlx.Stmt.
 func (tx *Tx) Stmtx(stmt interface{}) *Stmt {
 	var s *sql.Stmt
+	unsafe := tx.unsafe
 	switch v := stmt.(type) {
 	case Stmt:
 		s = v.Stmt
+		unsafe = unsafe || v.unsafe
 	case *Stmt:
 		s = v.Stmt
+		unsafe = unsafe || v.unsafe
 	case *sql.Stmt:
 		s = v
 	default:
 		panic(fmt.Sprintf("non-statement type %v passed to Stmtx", reflect.ValueOf(stmt).Type()))
 	}
-	return &Stmt{Stmt: tx.Stmt(s), Mapper: tx.Mapper}
+	return &Stmt{Stmt: tx.Stmt(s), unsafe: unsafe, Mapper: tx.Mapper}
 }
 
 // NamedStmt returns a version of the prepared statement which runs within a transaction.
