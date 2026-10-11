@@ -153,12 +153,17 @@ func prepareNamed(p namedPreparer, query string) (*NamedStmt, error) {
 func convertMapStringInterface(v interface{}) (map[string]interface{}, bool) {
 	var m map[string]interface{}
 	mtype := reflect.TypeOf(m)
-	t := reflect.TypeOf(v)
-	if !t.ConvertibleTo(mtype) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	if !rv.Type().ConvertibleTo(mtype) {
 		return nil, false
 	}
-	return reflect.ValueOf(v).Convert(mtype).Interface().(map[string]interface{}), true
-
+	return rv.Convert(mtype).Interface().(map[string]interface{}), true
 }
 
 func bindAnyArgs(names []string, arg interface{}, m *reflectx.Mapper) ([]interface{}, error) {
@@ -442,7 +447,8 @@ func bindNamedMapper(bindType int, query string, arg interface{}, m *reflectx.Ma
 	k := t.Kind()
 
 	if k == reflect.Ptr {
-		k = t.Elem().Kind()
+		t = t.Elem()
+		k = t.Kind()
 	}
 
 	switch {
