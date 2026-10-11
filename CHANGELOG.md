@@ -4,7 +4,7 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
-## v1.4.1 (unreleased)
+## v1.4.1 (2026-10-10)
 
 The first fork release. It keeps every exported identifier of v1.4.0 (CI runs
 `apidiff` against the v1.4.0 tag on every change), requires Go 1.24, adds one
