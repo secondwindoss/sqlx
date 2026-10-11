@@ -153,12 +153,17 @@ func prepareNamed(p namedPreparer, query string) (*NamedStmt, error) {
 func convertMapStringInterface(v interface{}) (map[string]interface{}, bool) {
 	var m map[string]interface{}
 	mtype := reflect.TypeOf(m)
-	t := reflect.TypeOf(v)
-	if !t.ConvertibleTo(mtype) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	if !rv.Type().ConvertibleTo(mtype) {
 		return nil, false
 	}
-	return reflect.ValueOf(v).Convert(mtype).Interface().(map[string]interface{}), true
-
+	return rv.Convert(mtype).Interface().(map[string]interface{}), true
 }
 
 func bindAnyArgs(names []string, arg interface{}, m *reflectx.Mapper) ([]interface{}, error) {
@@ -302,7 +307,7 @@ func bindArray(bindType int, query string, arg interface{}, m *reflectx.Mapper) 
 	if err != nil {
 		return "", []interface{}{}, err
 	}
-	arrayValue := reflect.ValueOf(arg)
+	arrayValue := reflect.Indirect(reflect.ValueOf(arg))
 	arrayLen := arrayValue.Len()
 	if arrayLen == 0 {
 		return "", []interface{}{}, fmt.Errorf("length of array is 0: %#v", arg)
@@ -446,6 +451,12 @@ func Named(query string, arg interface{}) (string, []interface{}, error) {
 func bindNamedMapper(bindType int, query string, arg interface{}, m *reflectx.Mapper) (string, []interface{}, error) {
 	t := reflect.TypeOf(arg)
 	k := t.Kind()
+
+	if k == reflect.Ptr {
+		t = t.Elem()
+		k = t.Kind()
+	}
+
 	switch {
 	case k == reflect.Map && t.Key().Kind() == reflect.String:
 		m, ok := convertMapStringInterface(arg)
