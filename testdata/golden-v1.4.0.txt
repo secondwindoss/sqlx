@@ -1,0 +1,239 @@
+named/insert struct/QUESTION: "INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?)" args=["Jason" "Moiron" "jmoiron@jmoiron.net"] err=<nil>
+named/insert struct/DOLLAR: "INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3)" args=["Jason" "Moiron" "jmoiron@jmoiron.net"] err=<nil>
+named/insert struct/NAMED: "INSERT INTO person (first_name, last_name, email) VALUES (:first_name, :last_name, :email)" args=["Jason" "Moiron" "jmoiron@jmoiron.net"] err=<nil>
+named/insert struct/AT: "INSERT INTO person (first_name, last_name, email) VALUES (@p1, @p2, @p3)" args=["Jason" "Moiron" "jmoiron@jmoiron.net"] err=<nil>
+named/select map/QUESTION: "SELECT * FROM person WHERE first_name=? AND last_name=?" args=["Jane" "Citizen"] err=<nil>
+named/select map/DOLLAR: "SELECT * FROM person WHERE first_name=$1 AND last_name=$2" args=["Jane" "Citizen"] err=<nil>
+named/select map/NAMED: "SELECT * FROM person WHERE first_name=:first_name AND last_name=:last_name" args=["Jane" "Citizen"] err=<nil>
+named/select map/AT: "SELECT * FROM person WHERE first_name=@p1 AND last_name=@p2" args=["Jane" "Citizen"] err=<nil>
+named/select struct trailing param/QUESTION: "SELECT * FROM person WHERE email=?" args=["jmoiron@jmoiron.net"] err=<nil>
+named/select struct trailing param/DOLLAR: "SELECT * FROM person WHERE email=$1" args=["jmoiron@jmoiron.net"] err=<nil>
+named/select struct trailing param/NAMED: "SELECT * FROM person WHERE email=:email" args=["jmoiron@jmoiron.net"] err=<nil>
+named/select struct trailing param/AT: "SELECT * FROM person WHERE email=@p1" args=["jmoiron@jmoiron.net"] err=<nil>
+named/params without spaces/QUESTION: "INSERT INTO t (a,b) VALUES(?,?)" args=[1 2] err=<nil>
+named/params without spaces/DOLLAR: "INSERT INTO t (a,b) VALUES($1,$2)" args=[1 2] err=<nil>
+named/params without spaces/NAMED: "INSERT INTO t (a,b) VALUES(:a,:b)" args=[1 2] err=<nil>
+named/params without spaces/AT: "INSERT INTO t (a,b) VALUES(@p1,@p2)" args=[1 2] err=<nil>
+named/batch insert structs/QUESTION: "INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?),(?, ?, ?)" args=["Jason" "Moiron" "jmoiron@jmoiron.net" "John" "Doe" "johndoeDNE@gmail.net"] err=<nil>
+named/batch insert structs/DOLLAR: "INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3),($4, $5, $6)" args=["Jason" "Moiron" "jmoiron@jmoiron.net" "John" "Doe" "johndoeDNE@gmail.net"] err=<nil>
+named/batch insert structs/NAMED: "INSERT INTO person (first_name, last_name, email) VALUES (:arg1, :arg2, :arg3),(:arg4, :arg5, :arg6)" args=["Jason" "Moiron" "jmoiron@jmoiron.net" "John" "Doe" "johndoeDNE@gmail.net"] err=<nil>
+named/batch insert structs/AT: "INSERT INTO person (first_name, last_name, email) VALUES (@p1, @p2, @p3),(@p4, @p5, @p6)" args=["Jason" "Moiron" "jmoiron@jmoiron.net" "John" "Doe" "johndoeDNE@gmail.net"] err=<nil>
+named/batch insert maps/QUESTION: "INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?),(?, ?, ?)" args=["Jane" "Citizen" "jane.citzen@example.com" "Bin" "Smuth" "bensmith@allblacks.nz"] err=<nil>
+named/batch insert maps/DOLLAR: "INSERT INTO person (first_name, last_name, email) VALUES ($1, $2, $3),($4, $5, $6)" args=["Jane" "Citizen" "jane.citzen@example.com" "Bin" "Smuth" "bensmith@allblacks.nz"] err=<nil>
+named/batch insert maps/NAMED: "INSERT INTO person (first_name, last_name, email) VALUES (:arg1, :arg2, :arg3),(:arg4, :arg5, :arg6)" args=["Jane" "Citizen" "jane.citzen@example.com" "Bin" "Smuth" "bensmith@allblacks.nz"] err=<nil>
+named/batch insert maps/AT: "INSERT INTO person (first_name, last_name, email) VALUES (@p1, @p2, @p3),(@p4, @p5, @p6)" args=["Jane" "Citizen" "jane.citzen@example.com" "Bin" "Smuth" "bensmith@allblacks.nz"] err=<nil>
+named/batch insert without column list/QUESTION: "insert into t values (?, ?)" args=[1 2 3 4] err=<nil>
+named/batch insert without column list/DOLLAR: "insert into t values ($1, $2)" args=[1 2 3 4] err=<nil>
+named/batch insert without column list/NAMED: "insert into t values (:arg1, :arg2)" args=[1 2 3 4] err=<nil>
+named/batch insert without column list/AT: "insert into t values (@p1, @p2)" args=[1 2 3 4] err=<nil>
+named/batch insert multiline/QUESTION: "INSERT INTO t (a, b)\nVALUES\n  (?, ?),(?, ?)" args=[1 2 3 4] err=<nil>
+named/batch insert multiline/DOLLAR: "INSERT INTO t (a, b)\nVALUES\n  ($1, $2),($3, $4)" args=[1 2 3 4] err=<nil>
+named/batch insert multiline/NAMED: "INSERT INTO t (a, b)\nVALUES\n  (:arg1, :arg2),(:arg3, :arg4)" args=[1 2 3 4] err=<nil>
+named/batch insert multiline/AT: "INSERT INTO t (a, b)\nVALUES\n  (@p1, @p2),(@p3, @p4)" args=[1 2 3 4] err=<nil>
+named/batch values in from/QUESTION: "UPDATE t SET b = u.b FROM (VALUES (?, ?)) AS u(a, b) WHERE t.a = u.a" args=[1 2 3 4] err=<nil>
+named/batch values in from/DOLLAR: "UPDATE t SET b = u.b FROM (VALUES ($1, $2)) AS u(a, b) WHERE t.a = u.a" args=[1 2 3 4] err=<nil>
+named/batch values in from/NAMED: "UPDATE t SET b = u.b FROM (VALUES (:arg1, :arg2)) AS u(a, b) WHERE t.a = u.a" args=[1 2 3 4] err=<nil>
+named/batch values in from/AT: "UPDATE t SET b = u.b FROM (VALUES (@p1, @p2)) AS u(a, b) WHERE t.a = u.a" args=[1 2 3 4] err=<nil>
+named/batch on duplicate key/QUESTION: "INSERT INTO t (a, b) VALUES (?, ?),(?, ?) ON DUPLICATE KEY UPDATE b = VALUES(b)" args=[1 2 3 4] err=<nil>
+named/batch on duplicate key/DOLLAR: "INSERT INTO t (a, b) VALUES ($1, $2),($3, $4) ON DUPLICATE KEY UPDATE b = VALUES(b)" args=[1 2 3 4] err=<nil>
+named/batch on duplicate key/NAMED: "INSERT INTO t (a, b) VALUES (:arg1, :arg2),(:arg3, :arg4) ON DUPLICATE KEY UPDATE b = VALUES(b)" args=[1 2 3 4] err=<nil>
+named/batch on duplicate key/AT: "INSERT INTO t (a, b) VALUES (@p1, @p2),(@p3, @p4) ON DUPLICATE KEY UPDATE b = VALUES(b)" args=[1 2 3 4] err=<nil>
+named/batch table named values/QUESTION: "INSERT INTO \"values\" (a, b) VALUES (?, ?),(?, ?)" args=[1 2 3 4] err=<nil>
+named/batch table named values/DOLLAR: "INSERT INTO \"values\" (a, b) VALUES ($1, $2),($3, $4)" args=[1 2 3 4] err=<nil>
+named/batch table named values/NAMED: "INSERT INTO \"values\" (a, b) VALUES (:arg1, :arg2),(:arg3, :arg4)" args=[1 2 3 4] err=<nil>
+named/batch table named values/AT: "INSERT INTO \"values\" (a, b) VALUES (@p1, @p2),(@p3, @p4)" args=[1 2 3 4] err=<nil>
+named/nested struct dotted names/QUESTION: "INSERT INTO booking (first, country, city, nights) VALUES (?, ?, ?, ?)" args=["Jason" "NZ" "Wellington" 3] err=<nil>
+named/nested struct dotted names/DOLLAR: "INSERT INTO booking (first, country, city, nights) VALUES ($1, $2, $3, $4)" args=["Jason" "NZ" "Wellington" 3] err=<nil>
+named/nested struct dotted names/NAMED: "INSERT INTO booking (first, country, city, nights) VALUES (:person.first_name, :place.country, :place.city, :nights)" args=["Jason" "NZ" "Wellington" 3] err=<nil>
+named/nested struct dotted names/AT: "INSERT INTO booking (first, country, city, nights) VALUES (@p1, @p2, @p3, @p4)" args=["Jason" "NZ" "Wellington" 3] err=<nil>
+named/cast attached to param/QUESTION: "" args=[] err=unexpected `:` while reading named param at 30
+named/cast attached to param/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 30
+named/cast attached to param/NAMED: "" args=[] err=unexpected `:` while reading named param at 30
+named/cast attached to param/AT: "" args=[] err=unexpected `:` while reading named param at 30
+named/cast attached to param text/QUESTION: "" args=[] err=unexpected `:` while reading named param at 10
+named/cast attached to param text/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 10
+named/cast attached to param text/NAMED: "" args=[] err=unexpected `:` while reading named param at 10
+named/cast attached to param text/AT: "" args=[] err=unexpected `:` while reading named param at 10
+named/cast elsewhere/QUESTION: "SELECT (now() AT TIME ZONE 'utc'):date FROM t WHERE id = ?" args=[42] err=<nil>
+named/cast elsewhere/DOLLAR: "SELECT (now() AT TIME ZONE 'utc'):date FROM t WHERE id = $1" args=[42] err=<nil>
+named/cast elsewhere/NAMED: "SELECT (now() AT TIME ZONE 'utc'):date FROM t WHERE id = :id" args=[42] err=<nil>
+named/cast elsewhere/AT: "SELECT (now() AT TIME ZONE 'utc'):date FROM t WHERE id = @p1" args=[42] err=<nil>
+named/double cast/QUESTION: "" args=[] err=unexpected `:` while reading named param at 10
+named/double cast/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 10
+named/double cast/NAMED: "" args=[] err=unexpected `:` while reading named param at 10
+named/double cast/AT: "" args=[] err=unexpected `:` while reading named param at 10
+named/old four-colon escape/QUESTION: "" args=[] err=unexpected `:` while reading named param at 10
+named/old four-colon escape/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 10
+named/old four-colon escape/NAMED: "" args=[] err=unexpected `:` while reading named param at 10
+named/old four-colon escape/AT: "" args=[] err=unexpected `:` while reading named param at 10
+named/colon in string literal time/QUESTION: "SELECT * FROM t WHERE at > '12?' AND id = ?" args=[] err=could not find name 30 in map[string]interface {}{"id":42}
+named/colon in string literal time/DOLLAR: "SELECT * FROM t WHERE at > '12$1' AND id = $2" args=[] err=could not find name 30 in map[string]interface {}{"id":42}
+named/colon in string literal time/NAMED: "SELECT * FROM t WHERE at > '12:30' AND id = :id" args=[] err=could not find name 30 in map[string]interface {}{"id":42}
+named/colon in string literal time/AT: "SELECT * FROM t WHERE at > '12@p1' AND id = @p2" args=[] err=could not find name 30 in map[string]interface {}{"id":42}
+named/colon in string literal words/QUESTION: "SELECT 'note? see ?' AS note, id FROM t WHERE id = ?" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in string literal words/DOLLAR: "SELECT 'note$1 see $2' AS note, id FROM t WHERE id = $3" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in string literal words/NAMED: "SELECT 'note: see :id' AS note, id FROM t WHERE id = :id" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in string literal words/AT: "SELECT 'note@p1 see @p2' AS note, id FROM t WHERE id = @p3" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in line comment/QUESTION: "SELECT * FROM t -- filter? by id\nWHERE id = ?" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in line comment/DOLLAR: "SELECT * FROM t -- filter$1 by id\nWHERE id = $2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in line comment/NAMED: "SELECT * FROM t -- filter: by id\nWHERE id = :id" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in line comment/AT: "SELECT * FROM t -- filter@p1 by id\nWHERE id = @p2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in block comment/QUESTION: "SELECT /* owner? ops */ * FROM t WHERE id = ?" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in block comment/DOLLAR: "SELECT /* owner$1 ops */ * FROM t WHERE id = $2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in block comment/NAMED: "SELECT /* owner: ops */ * FROM t WHERE id = :id" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/colon in block comment/AT: "SELECT /* owner@p1 ops */ * FROM t WHERE id = @p2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/nested block comment/QUESTION: "SELECT /* a /* b? */ c */ * FROM t WHERE id = ?" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/nested block comment/DOLLAR: "SELECT /* a /* b$1 */ c */ * FROM t WHERE id = $2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/nested block comment/NAMED: "SELECT /* a /* b: */ c */ * FROM t WHERE id = :id" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/nested block comment/AT: "SELECT /* a /* b@p1 */ c */ * FROM t WHERE id = @p2" args=[] err=could not find name  in map[string]interface {}{"id":42}
+named/mysql assignment/QUESTION: "SELECT @x := ?, @x + 1" args=[42] err=<nil>
+named/mysql assignment/DOLLAR: "SELECT @x := $1, @x + 1" args=[42] err=<nil>
+named/mysql assignment/NAMED: "SELECT @x := :id, @x + 1" args=[42] err=<nil>
+named/mysql assignment/AT: "SELECT @x := @p1, @x + 1" args=[42] err=<nil>
+named/array slice/QUESTION: "SELECT arr[1?] FROM t WHERE id = ?" args=[] err=could not find name 2 in map[string]interface {}{"id":42}
+named/array slice/DOLLAR: "SELECT arr[1$1] FROM t WHERE id = $2" args=[] err=could not find name 2 in map[string]interface {}{"id":42}
+named/array slice/NAMED: "SELECT arr[1:2] FROM t WHERE id = :id" args=[] err=could not find name 2 in map[string]interface {}{"id":42}
+named/array slice/AT: "SELECT arr[1@p1] FROM t WHERE id = @p2" args=[] err=could not find name 2 in map[string]interface {}{"id":42}
+named/unicode name/QUESTION: "INSERT INTO t (name) VALUES (?\x90\x8d前)" args=[] err=could not find name � in map[string]interface {}{"名前":"x"}
+named/unicode name/DOLLAR: "INSERT INTO t (name) VALUES ($1\x90\x8d前)" args=[] err=could not find name � in map[string]interface {}{"名前":"x"}
+named/unicode name/NAMED: "INSERT INTO t (name) VALUES (:名前)" args=[] err=could not find name � in map[string]interface {}{"名前":"x"}
+named/unicode name/AT: "INSERT INTO t (name) VALUES (@p1\x90\x8d前)" args=[] err=could not find name � in map[string]interface {}{"名前":"x"}
+named/dollar quoted string/QUESTION: "SELECT $$it's ? a param$$ AS s, id FROM t WHERE id = ?" args=[] err=could not find name not in map[string]interface {}{"id":42}
+named/dollar quoted string/DOLLAR: "SELECT $$it's $1 a param$$ AS s, id FROM t WHERE id = $2" args=[] err=could not find name not in map[string]interface {}{"id":42}
+named/dollar quoted string/NAMED: "SELECT $$it's :not a param$$ AS s, id FROM t WHERE id = :id" args=[] err=could not find name not in map[string]interface {}{"id":42}
+named/dollar quoted string/AT: "SELECT $$it's @p1 a param$$ AS s, id FROM t WHERE id = @p2" args=[] err=could not find name not in map[string]interface {}{"id":42}
+named/dollar quoted with tag/QUESTION: "" args=[] err=unexpected `:` while reading named param at 12
+named/dollar quoted with tag/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 12
+named/dollar quoted with tag/NAMED: "" args=[] err=unexpected `:` while reading named param at 12
+named/dollar quoted with tag/AT: "" args=[] err=unexpected `:` while reading named param at 12
+named/double quoted identifier/QUESTION: "SELECT \"col?\" FROM t WHERE id = ?" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/double quoted identifier/DOLLAR: "SELECT \"col$1\" FROM t WHERE id = $2" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/double quoted identifier/NAMED: "SELECT \"col:on\" FROM t WHERE id = :id" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/double quoted identifier/AT: "SELECT \"col@p1\" FROM t WHERE id = @p2" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/backtick identifier/QUESTION: "SELECT `col?` FROM t WHERE id = ?" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/backtick identifier/DOLLAR: "SELECT `col$1` FROM t WHERE id = $2" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/backtick identifier/NAMED: "SELECT `col:on` FROM t WHERE id = :id" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/backtick identifier/AT: "SELECT `col@p1` FROM t WHERE id = @p2" args=[] err=could not find name on in map[string]interface {}{"id":42}
+named/postgres escape string/QUESTION: "SELECT E'it\\'s' AS s FROM t WHERE id = ?" args=[42] err=<nil>
+named/postgres escape string/DOLLAR: "SELECT E'it\\'s' AS s FROM t WHERE id = $1" args=[42] err=<nil>
+named/postgres escape string/NAMED: "SELECT E'it\\'s' AS s FROM t WHERE id = :id" args=[42] err=<nil>
+named/postgres escape string/AT: "SELECT E'it\\'s' AS s FROM t WHERE id = @p1" args=[42] err=<nil>
+named/doubled quote in literal/QUESTION: "SELECT 'it''s ?' AS s FROM t WHERE id = ?" args=[] err=could not find name fine in map[string]interface {}{"id":42}
+named/doubled quote in literal/DOLLAR: "SELECT 'it''s $1' AS s FROM t WHERE id = $2" args=[] err=could not find name fine in map[string]interface {}{"id":42}
+named/doubled quote in literal/NAMED: "SELECT 'it''s :fine' AS s FROM t WHERE id = :id" args=[] err=could not find name fine in map[string]interface {}{"id":42}
+named/doubled quote in literal/AT: "SELECT 'it''s @p1' AS s FROM t WHERE id = @p2" args=[] err=could not find name fine in map[string]interface {}{"id":42}
+named/json path with colon/QUESTION: "SELECT data->>'k?' FROM t WHERE id = ?" args=[] err=could not find name v in map[string]interface {}{"id":42}
+named/json path with colon/DOLLAR: "SELECT data->>'k$1' FROM t WHERE id = $2" args=[] err=could not find name v in map[string]interface {}{"id":42}
+named/json path with colon/NAMED: "SELECT data->>'k:v' FROM t WHERE id = :id" args=[] err=could not find name v in map[string]interface {}{"id":42}
+named/json path with colon/AT: "SELECT data->>'k@p1' FROM t WHERE id = @p2" args=[] err=could not find name v in map[string]interface {}{"id":42}
+named/question mark literal/QUESTION: "SELECT '?' AS q FROM t WHERE id = ?" args=[42] err=<nil>
+named/question mark literal/DOLLAR: "SELECT '?' AS q FROM t WHERE id = $1" args=[42] err=<nil>
+named/question mark literal/NAMED: "SELECT '?' AS q FROM t WHERE id = :id" args=[42] err=<nil>
+named/question mark literal/AT: "SELECT '?' AS q FROM t WHERE id = @p1" args=[42] err=<nil>
+named/jsonb operator/QUESTION: "SELECT * FROM t WHERE data ? 'k' AND id = ?" args=[42] err=<nil>
+named/jsonb operator/DOLLAR: "SELECT * FROM t WHERE data ? 'k' AND id = $1" args=[42] err=<nil>
+named/jsonb operator/NAMED: "SELECT * FROM t WHERE data ? 'k' AND id = :id" args=[42] err=<nil>
+named/jsonb operator/AT: "SELECT * FROM t WHERE data ? 'k' AND id = @p1" args=[42] err=<nil>
+named/two params adjacent/QUESTION: "" args=[] err=unexpected `:` while reading named param at 9
+named/two params adjacent/DOLLAR: "" args=[] err=unexpected `:` while reading named param at 9
+named/two params adjacent/NAMED: "" args=[] err=unexpected `:` while reading named param at 9
+named/two params adjacent/AT: "" args=[] err=unexpected `:` while reading named param at 9
+named/name starting with digit/QUESTION: "SELECT ? AS one, ?" args=[] err=could not find name 1 in map[string]interface {}{"a":1, "b":2}
+named/name starting with digit/DOLLAR: "SELECT $1 AS one, $2" args=[] err=could not find name 1 in map[string]interface {}{"a":1, "b":2}
+named/name starting with digit/NAMED: "SELECT :1 AS one, :a" args=[] err=could not find name 1 in map[string]interface {}{"a":1, "b":2}
+named/name starting with digit/AT: "SELECT @p1 AS one, @p2" args=[] err=could not find name 1 in map[string]interface {}{"a":1, "b":2}
+named/param then colon then space/QUESTION: "SELECT ?, b? c" args=[1] err=could not find name  in map[string]interface {}{"a":1, "b":2}
+named/param then colon then space/DOLLAR: "SELECT $1, b$2 c" args=[1] err=could not find name  in map[string]interface {}{"a":1, "b":2}
+named/param then colon then space/NAMED: "SELECT :a, b: c" args=[1] err=could not find name  in map[string]interface {}{"a":1, "b":2}
+named/param then colon then space/AT: "SELECT @p1, b@p2 c" args=[1] err=could not find name  in map[string]interface {}{"a":1, "b":2}
+named/missing argument/QUESTION: "SELECT ?, ?" args=[1] err=could not find name missing in map[string]interface {}{"a":1, "b":2}
+named/missing argument/DOLLAR: "SELECT $1, $2" args=[1] err=could not find name missing in map[string]interface {}{"a":1, "b":2}
+named/missing argument/NAMED: "SELECT :a, :missing" args=[1] err=could not find name missing in map[string]interface {}{"a":1, "b":2}
+named/missing argument/AT: "SELECT @p1, @p2" args=[1] err=could not find name missing in map[string]interface {}{"a":1, "b":2}
+named/no params at all/QUESTION: "SELECT 1" args=[] err=<nil>
+named/no params at all/DOLLAR: "SELECT 1" args=[] err=<nil>
+named/no params at all/NAMED: "SELECT 1" args=[] err=<nil>
+named/no params at all/AT: "SELECT 1" args=[] err=<nil>
+named/empty map/QUESTION: "SELECT 1" args=[] err=<nil>
+named/empty map/DOLLAR: "SELECT 1" args=[] err=<nil>
+named/empty map/NAMED: "SELECT 1" args=[] err=<nil>
+named/empty map/AT: "SELECT 1" args=[] err=<nil>
+in/single slice: "SELECT * FROM t WHERE id IN (?, ?, ?)" args=[1 2 3] err=<nil>
+in/one element: "SELECT * FROM t WHERE id IN (?)" args=[1] err=<nil>
+in/two slices: "SELECT * FROM t WHERE a IN (?, ?) AND b IN (?, ?)" args=[1 2 "x" "y"] err=<nil>
+in/scalar and slice: "SELECT * FROM t WHERE x = ? AND id IN (?, ?) AND y = ?" args=["a" 1 2 "b"] err=<nil>
+in/interface slice: "SELECT * FROM t WHERE id IN (?, ?, ?)" args=[1 "two" 3] err=<nil>
+in/bytes are a value: "SELECT * FROM t WHERE blob = ?" args=[[]byte{0x78}] err=<nil>
+in/valuer scalar: "SELECT * FROM t WHERE x = ? AND id IN (?)" args=["v" 1] err=<nil>
+in/valuer slice: "SELECT * FROM t WHERE id IN (?, ?)" args=[7 8] err=<nil>
+in/empty slice: "" args=nil err=empty slice passed to 'in' query
+in/nil slice: "" args=nil err=empty slice passed to 'in' query
+in/empty slice not in: "" args=nil err=empty slice passed to 'in' query
+in/empty and full: "" args=nil err=empty slice passed to 'in' query
+in/question in line comment: "" args=nil err=number of bindVars exceeds arguments
+in/question in block comment: "" args=nil err=number of bindVars exceeds arguments
+in/question in literal: "" args=nil err=number of bindVars exceeds arguments
+in/question in identifier: "" args=nil err=number of bindVars exceeds arguments
+in/double question escape: "" args=nil err=number of bindVars exceeds arguments
+in/mysql escaped quote: "SELECT * FROM t WHERE note = 'don\\'t' AND id IN (?, ?)" args=[1 2] err=<nil>
+in/dollar quoted question: "" args=nil err=number of bindVars exceeds arguments
+in/too few args: "" args=nil err=number of bindVars exceeds arguments
+in/too many args: "" args=nil err=number of bindVars less than number arguments
+in/no slices passthrough: "SELECT * FROM t WHERE a = ? AND b = ?" args=[1 2] err=<nil>
+in/colon param left alone: "SELECT * FROM t WHERE a = :a AND id IN (?, ?)" args=[1 2] err=<nil>
+rebind/three placeholders/QUESTION: "INSERT INTO t (a, b, c) VALUES (?, ?, ?)"
+rebind/three placeholders/DOLLAR: "INSERT INTO t (a, b, c) VALUES ($1, $2, $3)"
+rebind/three placeholders/NAMED: "INSERT INTO t (a, b, c) VALUES (:arg1, :arg2, :arg3)"
+rebind/three placeholders/AT: "INSERT INTO t (a, b, c) VALUES (@p1, @p2, @p3)"
+rebind/no placeholders/QUESTION: "SELECT 1"
+rebind/no placeholders/DOLLAR: "SELECT 1"
+rebind/no placeholders/NAMED: "SELECT 1"
+rebind/no placeholders/AT: "SELECT 1"
+rebind/question in literal/QUESTION: "SELECT '?' AS q FROM t WHERE a = ?"
+rebind/question in literal/DOLLAR: "SELECT '$1' AS q FROM t WHERE a = $2"
+rebind/question in literal/NAMED: "SELECT ':arg1' AS q FROM t WHERE a = :arg2"
+rebind/question in literal/AT: "SELECT '@p1' AS q FROM t WHERE a = @p2"
+rebind/question in line comment/QUESTION: "SELECT * -- a?\nFROM t WHERE a = ?"
+rebind/question in line comment/DOLLAR: "SELECT * -- a$1\nFROM t WHERE a = $2"
+rebind/question in line comment/NAMED: "SELECT * -- a:arg1\nFROM t WHERE a = :arg2"
+rebind/question in line comment/AT: "SELECT * -- a@p1\nFROM t WHERE a = @p2"
+rebind/question in block comment/QUESTION: "SELECT /* a? */ * FROM t WHERE a = ?"
+rebind/question in block comment/DOLLAR: "SELECT /* a$1 */ * FROM t WHERE a = $2"
+rebind/question in block comment/NAMED: "SELECT /* a:arg1 */ * FROM t WHERE a = :arg2"
+rebind/question in block comment/AT: "SELECT /* a@p1 */ * FROM t WHERE a = @p2"
+rebind/double question escape/QUESTION: "SELECT * FROM t WHERE data ?? 'k' AND a = ?"
+rebind/double question escape/DOLLAR: "SELECT * FROM t WHERE data $1$2 'k' AND a = $3"
+rebind/double question escape/NAMED: "SELECT * FROM t WHERE data :arg1:arg2 'k' AND a = :arg3"
+rebind/double question escape/AT: "SELECT * FROM t WHERE data @p1@p2 'k' AND a = @p3"
+rebind/jsonb operators escaped/QUESTION: "SELECT * FROM t WHERE data ??| array['a'] AND data ??& array['b'] AND a = ?"
+rebind/jsonb operators escaped/DOLLAR: "SELECT * FROM t WHERE data $1$2| array['a'] AND data $3$4& array['b'] AND a = $5"
+rebind/jsonb operators escaped/NAMED: "SELECT * FROM t WHERE data :arg1:arg2| array['a'] AND data :arg3:arg4& array['b'] AND a = :arg5"
+rebind/jsonb operators escaped/AT: "SELECT * FROM t WHERE data @p1@p2| array['a'] AND data @p3@p4& array['b'] AND a = @p5"
+rebind/mysql escaped quote/QUESTION: "SELECT * FROM t WHERE note = 'don\\'t' AND a = ?"
+rebind/mysql escaped quote/DOLLAR: "SELECT * FROM t WHERE note = 'don\\'t' AND a = $1"
+rebind/mysql escaped quote/NAMED: "SELECT * FROM t WHERE note = 'don\\'t' AND a = :arg1"
+rebind/mysql escaped quote/AT: "SELECT * FROM t WHERE note = 'don\\'t' AND a = @p1"
+rebind/like escape clause/QUESTION: "SELECT * FROM t WHERE a LIKE ? ESCAPE '\\' AND b = ?"
+rebind/like escape clause/DOLLAR: "SELECT * FROM t WHERE a LIKE $1 ESCAPE '\\' AND b = $2"
+rebind/like escape clause/NAMED: "SELECT * FROM t WHERE a LIKE :arg1 ESCAPE '\\' AND b = :arg2"
+rebind/like escape clause/AT: "SELECT * FROM t WHERE a LIKE @p1 ESCAPE '\\' AND b = @p2"
+rebind/bracket identifier/QUESTION: "SELECT [what?] FROM t WHERE a = ?"
+rebind/bracket identifier/DOLLAR: "SELECT [what$1] FROM t WHERE a = $2"
+rebind/bracket identifier/NAMED: "SELECT [what:arg1] FROM t WHERE a = :arg2"
+rebind/bracket identifier/AT: "SELECT [what@p1] FROM t WHERE a = @p2"
+rebind/dollar quoted/QUESTION: "SELECT $$?$$ FROM t WHERE a = ?"
+rebind/dollar quoted/DOLLAR: "SELECT $$$1$$ FROM t WHERE a = $2"
+rebind/dollar quoted/NAMED: "SELECT $$:arg1$$ FROM t WHERE a = :arg2"
+rebind/dollar quoted/AT: "SELECT $$@p1$$ FROM t WHERE a = @p2"
+rebind/backtick identifier/QUESTION: "SELECT `a?` FROM t WHERE a = ?"
+rebind/backtick identifier/DOLLAR: "SELECT `a$1` FROM t WHERE a = $2"
+rebind/backtick identifier/NAMED: "SELECT `a:arg1` FROM t WHERE a = :arg2"
+rebind/backtick identifier/AT: "SELECT `a@p1` FROM t WHERE a = @p2"
+rebind/postgres escape string/QUESTION: "SELECT E'\\'?' FROM t WHERE a = ?"
+rebind/postgres escape string/DOLLAR: "SELECT E'\\'$1' FROM t WHERE a = $2"
+rebind/postgres escape string/NAMED: "SELECT E'\\':arg1' FROM t WHERE a = :arg2"
+rebind/postgres escape string/AT: "SELECT E'\\'@p1' FROM t WHERE a = @p2"
+rebind/already dollar/QUESTION: "SELECT * FROM t WHERE a = $1 AND b = ?"
+rebind/already dollar/DOLLAR: "SELECT * FROM t WHERE a = $1 AND b = $1"
+rebind/already dollar/NAMED: "SELECT * FROM t WHERE a = $1 AND b = :arg1"
+rebind/already dollar/AT: "SELECT * FROM t WHERE a = $1 AND b = @p1"
