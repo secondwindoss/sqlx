@@ -144,6 +144,12 @@ func asSliceForIn(i interface{}) (v reflect.Value, ok bool) {
 // placeholder style. In always returns a query that still uses `?`; call
 // db.Rebind on the result before Query/Exec so the placeholders match the
 // driver.
+//
+// An empty or nil slice expands to the SQL literal NULL and binds no
+// argument, so `x IN (?)` becomes `x IN (NULL)`, which matches no row on any
+// database. Note that `x NOT IN (NULL)` also matches no row (SQL three-valued
+// logic): if an empty list must mean "every row", build that branch of the
+// query yourself.
 func In(query string, args ...interface{}) (string, []interface{}, error) {
 	// argMeta stores reflect.Value and length for slices and
 	// the value itself for non-slice arguments
@@ -151,6 +157,7 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 		v      reflect.Value
 		i      interface{}
 		length int
+		empty  bool // a slice of length 0, rewritten to the literal NULL
 	}
 
 	var flatArgsCount int
@@ -180,10 +187,7 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 
 			anySlices = true
 			flatArgsCount += meta[i].length
-
-			if meta[i].length == 0 {
-				return "", nil, errors.New("empty slice passed to 'in' query")
-			}
+			meta[i].empty = meta[i].length == 0
 		} else {
 			meta[i].i = arg
 			flatArgsCount++
@@ -214,6 +218,15 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 
 		argMeta := meta[arg]
 		arg++
+
+		// an empty slice becomes the literal NULL, which binds nothing
+		if argMeta.empty {
+			buf.WriteString(query[:offset+i])
+			buf.WriteString("NULL")
+			query = query[offset+i+1:]
+			offset = 0
+			continue
+		}
 
 		// not a slice, continue.
 		// our questionmark will either be written before the next expansion
