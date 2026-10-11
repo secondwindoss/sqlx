@@ -18,6 +18,9 @@ In addition to the [API documentation](https://pkg.go.dev/github.com/secondwindo
 there is also upstream's [user guide](https://jmoiron.github.io/sqlx/) that
 explains how to use `database/sql` along with sqlx.
 
+`sqlx.In` always expands with `?` placeholders. Even on PostgreSQL, write
+`IN (?)` (not `IN ($1)`), then `db.Rebind` the query before running it.
+
 ## About this fork
 
 This is a maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
