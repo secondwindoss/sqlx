@@ -1,0 +1,47 @@
+name: Bug report
+description: sqlx does something wrong
+labels: [bug]
+body:
+- type: input
+  id: versions
+  attributes:
+    label: Versions
+    description: sqlx, Go, the driver and the database, each with its version
+    placeholder: sqlx v1.4.1, go1.27.2, lib/pq v1.10.9, PostgreSQL 16
+  validations:
+    required: true
+- type: textarea
+  id: query
+  attributes:
+    label: The query
+    description: The SQL you pass to sqlx and the call you make (Get, Select, NamedExec, In, ...)
+    render: sql
+  validations:
+    required: true
+- type: textarea
+  id: destination
+  attributes:
+    label: The struct, map or slice
+    description: The Go type you bind or scan into, with its `db` tags
+    render: go
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: What happens
+    description: The error text, the panic trace or the wrong result
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: What you expected
+  validations:
+    required: true
+- type: textarea
+  id: reproduction
+  attributes:
+    label: Minimal reproduction
+    description: A failing test in the style of sqlx_test.go is ideal
+    render: go
