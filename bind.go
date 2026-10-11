@@ -53,40 +53,62 @@ func BindDriver(driverName string, bindType int) {
 	binds.Store(driverName, bindType)
 }
 
-// FIXME: this should be able to be tolerant of escaped ?'s in queries without
-// losing much speed, and should be to avoid confusion.
-
 // Rebind a query from the default bindtype (QUESTION) to the target bindtype.
+// A '?' inside a string literal, a quoted identifier or a comment is left
+// alone, and '??' is the escape for a literal '?' with every bind type.
 func Rebind(bindType int, query string) string {
 	switch bindType {
 	case QUESTION, UNKNOWN:
-		return query
+		if !strings.Contains(query, "??") {
+			return query
+		}
 	}
 
 	// Add space enough for 10 params before we have to allocate
 	rqb := make([]byte, 0, len(query)+10)
 
-	var i, j int
-
-	for i = strings.Index(query, "?"); i != -1; i = strings.Index(query, "?") {
-		rqb = append(rqb, query[:i]...)
-
-		switch bindType {
-		case DOLLAR:
-			rqb = append(rqb, '$')
-		case NAMED:
-			rqb = append(rqb, ':', 'a', 'r', 'g')
-		case AT:
-			rqb = append(rqb, '@', 'p')
+	sc := sqlScanner{q: query, opt: scanOptsFor(bindType)}
+	last, j := 0, 0
+	for {
+		kind, start, end := sc.next()
+		if kind == tokEOF {
+			break
 		}
-
-		j++
-		rqb = strconv.AppendInt(rqb, int64(j), 10)
-
-		query = query[i+1:]
+		switch kind {
+		case tokQuestion:
+			rqb = append(rqb, query[last:start]...)
+			switch bindType {
+			case DOLLAR:
+				rqb = append(rqb, '$')
+			case NAMED:
+				rqb = append(rqb, ':', 'a', 'r', 'g')
+			case AT:
+				rqb = append(rqb, '@', 'p')
+			default:
+				rqb = append(rqb, '?')
+				last = end
+				continue
+			}
+			j++
+			rqb = strconv.AppendInt(rqb, int64(j), 10)
+			last = end
+		case tokQuestionPair:
+			rqb = append(rqb, query[last:start]...)
+			rqb = append(rqb, '?')
+			last = end
+		}
 	}
 
-	return string(append(rqb, query...))
+	return string(append(rqb, query[last:]...))
+}
+
+// scanOptsFor returns the scanner options for a bind type: SQL Server's
+// [bracketed] identifiers are only recognised for AT.
+func scanOptsFor(bindType int) scanOpts {
+	if bindType == AT {
+		return optBrackets
+	}
+	return 0
 }
 
 // Experimental implementation of Rebind which uses a bytes.Buffer.  The code is
@@ -143,7 +165,8 @@ func asSliceForIn(i interface{}) (v reflect.Value, ok bool) {
 // targeting PostgreSQL or other drivers that normally use a different
 // placeholder style. In always returns a query that still uses `?`; call
 // db.Rebind on the result before Query/Exec so the placeholders match the
-// driver.
+// driver. A `?` inside a string literal, a quoted identifier or a comment is
+// not a bindVar, and `??` is a literal `?`.
 //
 // An empty or nil slice expands to the SQL literal NULL and binds no
 // argument, so `x IN (?)` becomes `x IN (NULL)`, which matches no row on any
@@ -205,9 +228,18 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 	var buf strings.Builder
 	buf.Grow(len(query) + len(", ?")*flatArgsCount)
 
-	var arg, offset int
-
-	for i := strings.IndexByte(query[offset:], '?'); i != -1; i = strings.IndexByte(query[offset:], '?') {
+	// walk the query with the scanner so that a '?' inside a string literal
+	// or a comment is not taken for a bindvar; '??' and ':name' pass through
+	sc := sqlScanner{q: query}
+	arg, last := 0, 0
+	for {
+		kind, start, end := sc.next()
+		if kind == tokEOF {
+			break
+		}
+		if kind != tokQuestion {
+			continue
+		}
 		if arg >= len(meta) {
 			// if an argument wasn't passed, lets return an error;  this is
 			// not actually how database/sql Exec/Query works, but since we are
@@ -221,38 +253,30 @@ func In(query string, args ...interface{}) (string, []interface{}, error) {
 
 		// an empty slice becomes the literal NULL, which binds nothing
 		if argMeta.empty {
-			buf.WriteString(query[:offset+i])
+			buf.WriteString(query[last:start])
 			buf.WriteString("NULL")
-			query = query[offset+i+1:]
-			offset = 0
+			last = end
 			continue
 		}
 
-		// not a slice, continue.
-		// our questionmark will either be written before the next expansion
-		// of a slice or after the loop when writing the rest of the query
+		// not a slice: its '?' is copied along with the surrounding text
 		if argMeta.length == 0 {
-			offset = offset + i + 1
 			newArgs = append(newArgs, argMeta.i)
 			continue
 		}
 
 		// write everything up to and including our ? character
-		buf.WriteString(query[:offset+i+1])
+		buf.WriteString(query[last:end])
 
 		for si := 1; si < argMeta.length; si++ {
 			buf.WriteString(", ?")
 		}
 
 		newArgs = appendReflectSlice(newArgs, argMeta.v, argMeta.length)
-
-		// slice the query and reset the offset. this avoids some bookkeeping for
-		// the write after the loop
-		query = query[offset+i+1:]
-		offset = 0
+		last = end
 	}
 
-	buf.WriteString(query)
+	buf.WriteString(query[last:])
 
 	if arg < len(meta) {
 		return "", nil, errors.New("number of bindVars less than number arguments")

@@ -32,18 +32,18 @@ func TestCompileQuery(t *testing.T) {
 		},
 		{
 			Q: `SELECT "::foo" FROM a WHERE first_name=:name1 AND last_name=:name2`,
-			R: `SELECT ":foo" FROM a WHERE first_name=? AND last_name=?`,
-			D: `SELECT ":foo" FROM a WHERE first_name=$1 AND last_name=$2`,
-			T: `SELECT ":foo" FROM a WHERE first_name=@p1 AND last_name=@p2`,
-			N: `SELECT ":foo" FROM a WHERE first_name=:name1 AND last_name=:name2`,
+			R: `SELECT "::foo" FROM a WHERE first_name=? AND last_name=?`,
+			D: `SELECT "::foo" FROM a WHERE first_name=$1 AND last_name=$2`,
+			T: `SELECT "::foo" FROM a WHERE first_name=@p1 AND last_name=@p2`,
+			N: `SELECT "::foo" FROM a WHERE first_name=:name1 AND last_name=:name2`,
 			V: []string{"name1", "name2"},
 		},
 		{
 			Q: `SELECT 'a::b::c' || first_name, '::::ABC::_::' FROM person WHERE first_name=:first_name AND last_name=:last_name`,
-			R: `SELECT 'a:b:c' || first_name, '::ABC:_:' FROM person WHERE first_name=? AND last_name=?`,
-			D: `SELECT 'a:b:c' || first_name, '::ABC:_:' FROM person WHERE first_name=$1 AND last_name=$2`,
-			T: `SELECT 'a:b:c' || first_name, '::ABC:_:' FROM person WHERE first_name=@p1 AND last_name=@p2`,
-			N: `SELECT 'a:b:c' || first_name, '::ABC:_:' FROM person WHERE first_name=:first_name AND last_name=:last_name`,
+			R: `SELECT 'a::b::c' || first_name, '::::ABC::_::' FROM person WHERE first_name=? AND last_name=?`,
+			D: `SELECT 'a::b::c' || first_name, '::::ABC::_::' FROM person WHERE first_name=$1 AND last_name=$2`,
+			T: `SELECT 'a::b::c' || first_name, '::::ABC::_::' FROM person WHERE first_name=@p1 AND last_name=@p2`,
+			N: `SELECT 'a::b::c' || first_name, '::::ABC::_::' FROM person WHERE first_name=:first_name AND last_name=:last_name`,
 			V: []string{"first_name", "last_name"},
 		},
 		{
@@ -54,20 +54,19 @@ func TestCompileQuery(t *testing.T) {
 			T: `SELECT @name := "name", @p1, @p2, @p3`,
 			V: []string{"age", "first", "last"},
 		},
-		/* This unicode awareness test sadly fails, because of our byte-wise worldview.
-		 * We could certainly iterate by Rune instead, though it's a great deal slower,
-		 * it's probably the RightWay(tm)
+		// names may contain non-ASCII characters
 		{
 			Q: `INSERT INTO foo (a,b,c,d) VALUES (:あ, :b, :キコ, :名前)`,
 			R: `INSERT INTO foo (a,b,c,d) VALUES (?, ?, ?, ?)`,
 			D: `INSERT INTO foo (a,b,c,d) VALUES ($1, $2, $3, $4)`,
-			N: []string{"name", "age", "first", "last"},
+			T: `INSERT INTO foo (a,b,c,d) VALUES (@p1, @p2, @p3, @p4)`,
+			N: `INSERT INTO foo (a,b,c,d) VALUES (:あ, :b, :キコ, :名前)`,
+			V: []string{"あ", "b", "キコ", "名前"},
 		},
-		*/
 	}
 
 	for _, test := range table {
-		qr, names, err := compileNamedQuery([]byte(test.Q), QUESTION)
+		qr, names, err := compileNamedQuery(test.Q, QUESTION)
 		if err != nil {
 			t.Error(err)
 		}
@@ -83,17 +82,17 @@ func TestCompileQuery(t *testing.T) {
 				}
 			}
 		}
-		qd, _, _ := compileNamedQuery([]byte(test.Q), DOLLAR)
+		qd, _, _ := compileNamedQuery(test.Q, DOLLAR)
 		if qd != test.D {
 			t.Errorf("\nexpected: `%s`\ngot:      `%s`", test.D, qd)
 		}
 
-		qt, _, _ := compileNamedQuery([]byte(test.Q), AT)
+		qt, _, _ := compileNamedQuery(test.Q, AT)
 		if qt != test.T {
 			t.Errorf("\nexpected: `%s`\ngot:      `%s`", test.T, qt)
 		}
 
-		qq, _, _ := compileNamedQuery([]byte(test.Q), NAMED)
+		qq, _, _ := compileNamedQuery(test.Q, NAMED)
 		if qq != test.N {
 			t.Errorf("\nexpected: `%s`\ngot:      `%s`\n(len: %d vs %d)", test.N, qq, len(test.N), len(qq))
 		}
@@ -123,10 +122,9 @@ func (t Test) Errorf(err error, format string, args ...interface{}) {
 }
 
 func TestEscapedColons(t *testing.T) {
-	t.Skip("not sure it is possible to support this in general case without an SQL parser")
 	var qs = `SELECT * FROM testtable WHERE timeposted BETWEEN (now() AT TIME ZONE 'utc') AND
 	(now() AT TIME ZONE 'utc') - interval '01:30:00') AND name = '\'this is a test\'' and id = :id`
-	_, _, err := compileNamedQuery([]byte(qs), DOLLAR)
+	_, _, err := compileNamedQuery(qs, DOLLAR)
 	if err != nil {
 		t.Error("Didn't handle colons correctly when inside a string")
 	}
@@ -304,16 +302,17 @@ func TestNamedQueries(t *testing.T) {
 			t.Errorf("expected %s, got %s", sl.Email, p2.Email)
 		}
 
-		_, _, err = db.BindNamed("SELECT * FROM person WHERE id=:id /*TODO: handle accidental colon in named query*/", struct {
+		// a colon inside a comment is not a parameter (upstream #394, #894)
+		q, args, err := db.BindNamed("SELECT * FROM person WHERE id=:id /*TODO: handle accidental colon in named query*/", struct {
 			ID int `db:"id"`
 		}{1})
-		if err == nil || !strings.Contains(err.Error(), "sqlx.bindArgs: empty named parameter") {
-			t.Error("Expected an empty named parameter error with struct arg.")
+		if err != nil || len(args) != 1 || !strings.Contains(q, "/*TODO: handle accidental colon in named query*/") {
+			t.Errorf("colon inside a comment with a struct arg: q=%q args=%v err=%v", q, args, err)
 		}
 
-		_, _, err = db.BindNamed("SELECT * FROM person WHERE id=:id /*TODO: handle accidental colon in named query*/", map[string]interface{}{"id": 1})
-		if err == nil || !strings.Contains(err.Error(), "sqlx.bindMapArgs: empty named parameter") {
-			t.Error("Expected an empty named parameter error with map arg.")
+		q, args, err = db.BindNamed("SELECT * FROM person WHERE id=:id /*TODO: handle accidental colon in named query*/", map[string]interface{}{"id": 1})
+		if err != nil || len(args) != 1 || !strings.Contains(q, "/*TODO: handle accidental colon in named query*/") {
+			t.Errorf("colon inside a comment with a map arg: q=%q args=%v err=%v", q, args, err)
 		}
 	})
 }
