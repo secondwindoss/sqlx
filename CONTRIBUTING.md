@@ -27,6 +27,9 @@ to [Discussions](https://github.com/secondwindoss/sqlx/discussions).
    tests` when it cannot connect; CI fails on either line, so make sure both
    databases are reachable before you rely on a local run.
 3. Run `make tooling` once, then `make lint fmt vuln-check` before pushing.
+   If the change alters what `Named`, `In` or `Rebind` emit, run
+   `go test -run TestGolden -update`, review the diff of
+   `testdata/golden.txt`, and mention the changed lines in the pull request.
 4. Open a pull request against `master`. CI runs the lint job and the race
    tests on Go 1.23 to stable with all three databases and must be green
    before the merge.
