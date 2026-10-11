@@ -296,7 +296,7 @@ func bindArray(bindType int, query string, arg interface{}, m *reflectx.Mapper) 
 	if err != nil {
 		return "", []interface{}{}, err
 	}
-	arrayValue := reflect.ValueOf(arg)
+	arrayValue := reflect.Indirect(reflect.ValueOf(arg))
 	arrayLen := arrayValue.Len()
 	if arrayLen == 0 {
 		return "", []interface{}{}, fmt.Errorf("length of array is 0: %#v", arg)
@@ -440,6 +440,11 @@ func Named(query string, arg interface{}) (string, []interface{}, error) {
 func bindNamedMapper(bindType int, query string, arg interface{}, m *reflectx.Mapper) (string, []interface{}, error) {
 	t := reflect.TypeOf(arg)
 	k := t.Kind()
+
+	if k == reflect.Ptr {
+		k = t.Elem().Kind()
+	}
+
 	switch {
 	case k == reflect.Map && t.Key().Kind() == reflect.String:
 		m, ok := convertMapStringInterface(arg)
