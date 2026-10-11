@@ -1,15 +1,25 @@
-# <img src=".github/logo.png" alt="sqlx" width="320">
+<p align="center">
+  <img src=".github/banner.png" alt="sqlx: the maintained fork of jmoiron/sqlx" width="100%">
+</p>
 
-**The maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
-Same API, same package name, with the fixes upstream never merged.**
+<h3 align="center">
+  <a href="https://pkg.go.dev/github.com/secondwindoss/sqlx">[Docs]</a> ·
+  <a href="#quick-start">[Quick Start]</a> ·
+  <a href="#migrating-from-jmoironsqlx">[Migration]</a> ·
+  <a href="https://jmoiron.github.io/sqlx/">[User Guide]</a> ·
+  <a href="CHANGELOG.md">[Changelog]</a>
+</h3>
 
-[![CI](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg)](https://pkg.go.dev/github.com/secondwindoss/sqlx)
-[![Go version](https://img.shields.io/github/go-mod/go-version/secondwindoss/sqlx)](go.mod)
-[![Release](https://img.shields.io/github/v/release/secondwindoss/sqlx)](https://github.com/secondwindoss/sqlx/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master"></a>
+  <a href="https://pkg.go.dev/github.com/secondwindoss/sqlx"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg"></a>
+  <a href="go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/secondwindoss/sqlx"></a>
+  <a href="https://github.com/secondwindoss/sqlx/releases"><img alt="Release" src="https://img.shields.io/github/v/release/secondwindoss/sqlx"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
 
-sqlx extends Go's standard `database/sql` package. Its `DB`, `Tx`, `Stmt` and
+sqlx is the maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
+It extends Go's standard `database/sql` package. Its `DB`, `Tx`, `Stmt` and
 `Rows` types embed the standard ones, so every `database/sql` method still
 works and the extensions sit next to them: scan rows into structs, maps and
 slices, run named queries with `:name` parameters, expand slices with `In`,
