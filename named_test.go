@@ -446,6 +446,36 @@ WHERE t.id = u.id
 `,
 			loop: 2,
 		},
+		{
+			name:   "VALUES in a JOIN (upstream #754)",
+			query:  `SELECT t_1.code, t_2.name FROM table_1 t_1 INNER JOIN (VALUES (:v_code, :v_name)) t_2 (code, name) ON t_1.code = t_2.code`,
+			expect: `SELECT t_1.code, t_2.name FROM table_1 t_1 INNER JOIN (VALUES (:v_code, :v_name),(:v_code, :v_name)) t_2 (code, name) ON t_1.code = t_2.code`,
+			loop:   2,
+		},
+		{
+			name:   "INSERT SELECT from VALUES with a trailing comment (upstream #754)",
+			query:  "INSERT INTO table_1 SELECT * FROM (VALUES (:v_code, 18, 'const')) --- comment\n t_2 (code, age, last);",
+			expect: "INSERT INTO table_1 SELECT * FROM (VALUES (:v_code, 18, 'const'),(:v_code, 18, 'const')) --- comment\n t_2 (code, age, last);",
+			loop:   2,
+		},
+		{
+			name:   "table named values (upstream #811)",
+			query:  `INSERT INTO values (a, b) VALUES (:a, :b)`,
+			expect: `INSERT INTO values (a, b) VALUES (:a, :b),(:a, :b)`,
+			loop:   2,
+		},
+		{
+			name:   "SELECT from a VALUES list (upstream #811)",
+			query:  `SELECT * FROM (VALUES (:a, :b))`,
+			expect: `SELECT * FROM (VALUES (:a, :b),(:a, :b))`,
+			loop:   2,
+		},
+		{
+			name:   "ClickHouse SETTINGS before VALUES (upstream #948)",
+			query:  `INSERT INTO foo (a,b) settings async_insert=1, wait_for_async_insert=1 VALUES(:a, :b)`,
+			expect: `INSERT INTO foo (a,b) settings async_insert=1, wait_for_async_insert=1 VALUES(:a, :b),(:a, :b)`,
+			loop:   2,
+		},
 	}
 
 	for _, tc := range table {

@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/secondwindoss/sqlx/reflectx"
@@ -242,14 +243,32 @@ func findMatchingClosingBracketIndex(s string) int {
 	return 0
 }
 
+// fixBound repeats the VALUES group of a batch insert loop-1 more times.
+// The group chosen is the first one that contains a bind variable, so that a
+// table named "values" or MySQL's VALUES(col) in an ON DUPLICATE KEY UPDATE
+// clause is not mistaken for it. When no group contains a bind variable the
+// first match is used, as before.
 func fixBound(bound string, loop int) string {
-	loc := valuesReg.FindStringIndex(bound)
+	locs := valuesReg.FindAllStringIndex(bound, -1)
 	// defensive guard when "VALUES (...)" not found
-	if len(loc) < 2 {
+	if len(locs) == 0 {
 		return bound
 	}
 
-	openingBracketIndex := loc[1] - 1
+	chosen := 0
+	for i, loc := range locs {
+		openingBracketIndex := loc[1] - 1
+		index := findMatchingClosingBracketIndex(bound[openingBracketIndex:])
+		if index == 0 {
+			continue
+		}
+		if strings.ContainsAny(bound[openingBracketIndex:openingBracketIndex+index+1], "?$:@") {
+			chosen = i
+			break
+		}
+	}
+
+	openingBracketIndex := locs[chosen][1] - 1
 	index := findMatchingClosingBracketIndex(bound[openingBracketIndex:])
 	// defensive guard. must have closing bracket
 	if index == 0 {
