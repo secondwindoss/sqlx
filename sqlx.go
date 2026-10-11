@@ -648,6 +648,17 @@ func (r *Rows) StructScan(dest interface{}) error {
 	return r.Err()
 }
 
+// NextResultSet behaves like sql.NextResultSet, but cleans cache of previous result set.
+func (r *Rows) NextResultSet() bool {
+	if !r.Rows.NextResultSet() {
+		return false
+	}
+	r.started = false
+	r.fields = nil
+	r.values = nil
+	return true
+}
+
 // Connect to a database and verify with a ping.
 func Connect(driverName, dataSourceName string) (*DB, error) {
 	return ConnectContext(context.Background(), driverName, dataSourceName)
