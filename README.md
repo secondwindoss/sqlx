@@ -29,10 +29,13 @@ unmerged as pull requests with no maintainer activity. The fork keeps the full
 upstream history, the MIT license and the `sqlx` package name, and ships those
 fixes under the module path `github.com/secondwindoss/sqlx`.
 
-The first fork release, v1.4.1, is a strict superset of upstream v1.4.0: the
-same exported API with bug fixes only. [CHANGELOG.md](CHANGELOG.md) lists what
-each release contains and which upstream pull request and author each fix
-comes from.
+The first fork release, v1.4.1, keeps every exported identifier of upstream
+v1.4.0 (CI checks this with `apidiff`), adds `Tx.NamedQueryContext`, requires
+Go 1.24 and fixes the bugs that sat in upstream pull requests. Three documented
+behaviours change: `::` is a cast and no longer an escape for `:`, `??` is a
+literal `?`, and `In` expands an empty slice to `NULL` instead of returning an
+error. [CHANGELOG.md](CHANGELOG.md) lists every change with the upstream pull
+request and author it comes from.
 
 ## Migrating from github.com/jmoiron/sqlx
 
@@ -48,6 +51,14 @@ declare the upstream module path, so v1.4.1 is the first version that resolves
 under the new path.
 
 ## Recent Changes
+
+1.4.1:
+
+* named queries, `In` and `Rebind` skip string literals, quoted identifiers and comments; `::` casts work as written
+* `In` expands an empty slice to `NULL`; `??` is a literal `?`
+* `Tx.NamedQueryContext`; batch inserts without a column list; pointer arguments to named queries
+* statements prepared on a `Conn` keep its mapper; `Tx.Stmtx` keeps `unsafe`; `NextResultSet` resets the field cache
+* requires Go 1.24; see [CHANGELOG.md](CHANGELOG.md) for every change and its upstream credit
 
 1.3.0:
 
@@ -76,6 +87,8 @@ will get major version number bumps.
 ## install
 
     go get github.com/secondwindoss/sqlx@v1.4.1
+
+sqlx requires Go 1.24 or newer.
 
 ## issues
 
