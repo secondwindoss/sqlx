@@ -5,9 +5,9 @@ SHELL = /bin/sh
 BASE_PACKAGE := github.com/secondwindoss/sqlx
 
 tooling:
-	go install honnef.co/go/tools/cmd/staticcheck@v0.4.7
-	go install golang.org/x/vuln/cmd/govulncheck@v1.0.4
-	go install golang.org/x/tools/cmd/goimports@v0.20.0
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install golang.org/x/tools/cmd/goimports@latest
 
 has-changes:
 	git diff --exit-code --quiet HEAD --
