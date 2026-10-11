@@ -563,6 +563,10 @@ func (q *qStmt) Queryx(query string, args ...interface{}) (*Rows, error) {
 	return &Rows{Rows: r, unsafe: q.Stmt.unsafe, Mapper: q.Stmt.Mapper}, err
 }
 
+func (q *qStmt) QueryRow(query string, args ...interface{}) *sql.Row {
+	return q.Stmt.QueryRow(args...)
+}
+
 func (q *qStmt) QueryRowx(query string, args ...interface{}) *Row {
 	rows, err := q.Stmt.Query(args...)
 	return &Row{rows: rows, err: err, unsafe: q.Stmt.unsafe, Mapper: q.Stmt.Mapper}
