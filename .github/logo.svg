@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="96" viewBox="0 0 320 96" role="img" aria-label="sqlx">
+  <rect x="2" y="2" width="316" height="92" rx="20" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+  <text x="34" y="66" font-family="Menlo, SFMono-Regular, Consolas, 'Liberation Mono', monospace" font-size="56" font-weight="700" fill="#ffffff" letter-spacing="-2">sql<tspan fill="#00add8">x</tspan></text>
+  <text x="208" y="42" font-family="Menlo, SFMono-Regular, Consolas, monospace" font-size="16" fill="#94a3b8">:name</text>
+  <text x="208" y="66" font-family="Menlo, SFMono-Regular, Consolas, monospace" font-size="16" fill="#94a3b8">$1  ?</text>
+</svg>

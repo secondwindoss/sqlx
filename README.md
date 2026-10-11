@@ -1,4 +1,4 @@
-# sqlx
+# <img src=".github/logo.png" alt="sqlx" width="320">
 
 **The maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 Same API, same package name, with the fixes upstream never merged.**
