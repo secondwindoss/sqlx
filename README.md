@@ -1,6 +1,6 @@
 # sqlx
 
-[![CircleCI](https://dl.circleci.com/status-badge/img/gh/jmoiron/sqlx/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/jmoiron/sqlx/tree/master) [![Coverage Status](https://coveralls.io/repos/github/jmoiron/sqlx/badge.svg?branch=master)](https://coveralls.io/github/jmoiron/sqlx?branch=master) [![Godoc](http://img.shields.io/badge/godoc-reference-blue.svg?style=flat)](https://godoc.org/github.com/jmoiron/sqlx) [![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/jmoiron/sqlx/master/LICENSE)
+[![CI](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg)](https://pkg.go.dev/github.com/secondwindoss/sqlx) [![license](https://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/secondwindoss/sqlx/master/LICENSE)
 
 sqlx is a library which provides a set of extensions on go's standard
 `database/sql` library.  The sqlx versions of `sql.DB`, `sql.TX`, `sql.Stmt`,
@@ -14,9 +14,35 @@ Major additional concepts are:
 * Named parameter support including prepared statements
 * `Get` and `Select` to go quickly from query to struct/slice
 
-In addition to the [godoc API documentation](http://godoc.org/github.com/jmoiron/sqlx),
-there is also some [user documentation](http://jmoiron.github.io/sqlx/) that
+In addition to the [API documentation](https://pkg.go.dev/github.com/secondwindoss/sqlx),
+there is also upstream's [user guide](https://jmoiron.github.io/sqlx/) that
 explains how to use `database/sql` along with sqlx.
+
+## About this fork
+
+This is a maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
+Upstream's last release is v1.4.0 (April 2024); since then bug fixes have sat
+unmerged as pull requests with no maintainer activity. The fork keeps the full
+upstream history, the MIT license and the `sqlx` package name, and ships those
+fixes under the module path `github.com/secondwindoss/sqlx`.
+
+The first fork release, v1.4.1, is a strict superset of upstream v1.4.0: the
+same exported API with bug fixes only. [CHANGELOG.md](CHANGELOG.md) lists what
+each release contains and which upstream pull request and author each fix
+comes from.
+
+## Migrating from github.com/jmoiron/sqlx
+
+Only the import path changes. Rewrite it in your module, then update the
+dependency:
+
+    grep -rl 'github.com/jmoiron/sqlx' --include='*.go' . | xargs sed -i '' 's#github.com/jmoiron/sqlx#github.com/secondwindoss/sqlx#g'
+    go get github.com/secondwindoss/sqlx@v1.4.1
+    go mod tidy
+
+On Linux drop the `''` after `sed -i`. Tags up to v1.4.0 are upstream's and
+declare the upstream module path, so v1.4.1 is the first version that resolves
+under the new path.
 
 ## Recent Changes
 
@@ -46,7 +72,7 @@ will get major version number bumps.
 
 ## install
 
-    go get github.com/jmoiron/sqlx
+    go get github.com/secondwindoss/sqlx@v1.4.1
 
 ## issues
 
@@ -64,7 +90,7 @@ to give columns distinct names, `rows.Scan` to scan them manually, or
 ## usage
 
 Below is an example which shows some common use cases for sqlx.  Check 
-[sqlx_test.go](https://github.com/jmoiron/sqlx/blob/master/sqlx_test.go) for more
+[sqlx_test.go](https://github.com/secondwindoss/sqlx/blob/master/sqlx_test.go) for more
 usage.
 
 
@@ -77,7 +103,7 @@ import (
     "log"
     
     _ "github.com/lib/pq"
-    "github.com/jmoiron/sqlx"
+    "github.com/secondwindoss/sqlx"
 )
 
 var schema = `
@@ -130,9 +156,9 @@ func main() {
     // Query the database, storing results in a []Person (wrapped in []interface{})
     people := []Person{}
     db.Select(&people, "SELECT * FROM person ORDER BY first_name ASC")
-    jason, john := people[0], people[1]
+    jason, john := people[1], people[2]
 
-    fmt.Printf("%#v\n%#v", jason, john)
+    fmt.Printf("%#v\n%#v\n", jason, john)
     // Person{FirstName:"Jason", LastName:"Moiron", Email:"jmoiron@jmoiron.net"}
     // Person{FirstName:"John", LastName:"Doe", Email:"johndoeDNE@gmail.net"}
 
