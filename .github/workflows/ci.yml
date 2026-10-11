@@ -30,7 +30,10 @@ jobs:
     - name: go vet
       run: go vet ./...
     - name: staticcheck
-      run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 -checks=all ./...
+      # v0.8.1 cannot read Go 1.27.2 export data ("export data version 5 is greater than maximum
+      # supported version 4"). This master build from 2026-10-09 can; pin a tagged release again
+      # once one is published.
+      run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20261009230814-452d5bb86b45 -checks=all ./...
     - name: goimports
       run: |
         out="$(go run golang.org/x/tools/cmd/goimports@v0.52.0 -l -local "$(go list -m)" .)"
