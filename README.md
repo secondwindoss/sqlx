@@ -1,119 +1,314 @@
-# sqlx
+# <img src=".github/logo.png" alt="sqlx" width="320">
 
-[![CI](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg)](https://pkg.go.dev/github.com/secondwindoss/sqlx) [![license](https://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/secondwindoss/sqlx/master/LICENSE)
+**The maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
+Same API, same package name, with the fixes upstream never merged.**
 
-sqlx is a library which provides a set of extensions on go's standard
-`database/sql` library.  The sqlx versions of `sql.DB`, `sql.TX`, `sql.Stmt`,
-et al. all leave the underlying interfaces untouched, so that their interfaces
-are a superset on the standard ones.  This makes it relatively painless to
-integrate existing codebases using database/sql with sqlx.
+[![CI](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg)](https://pkg.go.dev/github.com/secondwindoss/sqlx)
+[![Go version](https://img.shields.io/github/go-mod/go-version/secondwindoss/sqlx)](go.mod)
+[![Release](https://img.shields.io/github/v/release/secondwindoss/sqlx)](https://github.com/secondwindoss/sqlx/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Major additional concepts are:
+sqlx extends Go's standard `database/sql` package. Its `DB`, `Tx`, `Stmt` and
+`Rows` types embed the standard ones, so every `database/sql` method still
+works and the extensions sit next to them: scan rows into structs, maps and
+slices, run named queries with `:name` parameters, expand slices with `In`,
+and go from query to struct in one call with `Get` and `Select`.
 
-* Marshal rows into structs (with embedded struct support), maps, and slices
-* Named parameter support including prepared statements
-* `Get` and `Select` to go quickly from query to struct/slice
+## Why this fork
 
-In addition to the [API documentation](https://pkg.go.dev/github.com/secondwindoss/sqlx),
-there is also upstream's [user guide](https://jmoiron.github.io/sqlx/) that
-explains how to use `database/sql` along with sqlx.
+- **Drop-in.** Every exported identifier of upstream v1.4.0 is unchanged.
+  CI runs `apidiff` against the v1.4.0 tag on every pull request to keep it
+  that way. Migration is an import path change.
+- **Fixed.** Named queries, `In` and `Rebind` now read SQL instead of counting
+  bytes. A `?` or `:` inside a string literal, a quoted identifier or a comment
+  is no longer mistaken for a parameter, and `now()::date` works as written.
+  Twelve more upstream pull requests are merged with their original authors.
+- **Maintained.** Every change runs the race tests on four Go versions against
+  PostgreSQL 16, MySQL 8 and SQLite, plus `vet`, `staticcheck`, `goimports`
+  and `govulncheck`.
 
-`sqlx.In` always expands with `?` placeholders. Even on PostgreSQL, write
-`IN (?)` (not `IN ($1)`), then `db.Rebind` the query before running it.
+|                    | jmoiron/sqlx                 | secondwindoss/sqlx                |
+|--------------------|------------------------------|-----------------------------------|
+| Last release       | v1.4.0, April 2024           | v1.4.1, October 2026              |
+| Last commit        | May 2024                     | active                            |
+| Open pull requests | 79 (October 2026)            | 0, the fixes are merged           |
+| Go support         | `go 1.10`, untested          | Go 1.24 and newer, tested         |
+| API                |                              | identical, checked by `apidiff`   |
 
-## About this fork
+## Quick start
 
-This is a maintained fork of [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
-Upstream's last release is v1.4.0 (April 2024); since then bug fixes have sat
-unmerged as pull requests with no maintainer activity. The fork keeps the full
-upstream history, the MIT license and the `sqlx` package name, and ships those
-fixes under the module path `github.com/secondwindoss/sqlx`.
+    go get github.com/secondwindoss/sqlx@v1.4.1
 
-The first fork release, v1.4.1, keeps every exported identifier of upstream
-v1.4.0 (CI checks this with `apidiff`), adds `Tx.NamedQueryContext`, requires
-Go 1.24 and fixes the bugs that sat in upstream pull requests. Three documented
-behaviours change: `::` is a cast and no longer an escape for `:`, `??` is a
-literal `?`, and `In` expands an empty slice to `NULL` instead of returning an
-error. [CHANGELOG.md](CHANGELOG.md) lists every change with the upstream pull
-request and author it comes from.
+sqlx requires Go 1.24 or newer.
 
-## Migrating from github.com/jmoiron/sqlx
+> [!NOTE]
+> Coming from `github.com/jmoiron/sqlx`? Only the import path changes. See
+> [Migrating from jmoiron/sqlx](#migrating-from-jmoironsqlx).
 
-Only the import path changes. Rewrite it in your module, then update the
-dependency:
+```go
+package main
+
+import (
+	"log"
+
+	_ "github.com/lib/pq"
+	"github.com/secondwindoss/sqlx"
+)
+
+type Person struct {
+	ID        int    `db:"id"`
+	FirstName string `db:"first_name"`
+	Email     string // no tag: maps to the column "email"
+}
+
+func main() {
+	// Connect opens the pool and pings it. Use sqlx.Open for sql.Open semantics.
+	db, err := sqlx.Connect("postgres", "user=foo dbname=bar sslmode=disable")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// Named parameters come from the struct's db tags.
+	_, err = db.NamedExec(`INSERT INTO person (first_name, email) VALUES (:first_name, :email)`,
+		&Person{FirstName: "Jane", Email: "jane@example.com"})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// One row into a struct.
+	var jane Person
+	if err := db.Get(&jane, "SELECT * FROM person WHERE first_name = $1", "Jane"); err != nil {
+		log.Fatalln(err)
+	}
+
+	// Many rows into a slice.
+	var people []Person
+	if err := db.Select(&people, "SELECT * FROM person ORDER BY id"); err != nil {
+		log.Fatalln(err)
+	}
+	log.Printf("%+v, %d people", jane, len(people))
+}
+```
+
+## Migrating from jmoiron/sqlx
+
+Rewrite the import path, then update the dependency.
+
+macOS:
 
     grep -rl 'github.com/jmoiron/sqlx' --include='*.go' . | xargs sed -i '' 's#github.com/jmoiron/sqlx#github.com/secondwindoss/sqlx#g'
     go get github.com/secondwindoss/sqlx@v1.4.1
     go mod tidy
 
-On Linux drop the `''` after `sed -i`. Tags up to v1.4.0 are upstream's and
-declare the upstream module path, so v1.4.1 is the first version that resolves
-under the new path.
+Linux:
+
+    grep -rl 'github.com/jmoiron/sqlx' --include='*.go' . | xargs sed -i 's#github.com/jmoiron/sqlx#github.com/secondwindoss/sqlx#g'
+    go get github.com/secondwindoss/sqlx@v1.4.1
+    go mod tidy
+
+Tags up to v1.4.0 are upstream's and declare the upstream module path, so
+v1.4.1 is the first version that resolves under the new path.
 
 A `replace github.com/jmoiron/sqlx => github.com/secondwindoss/sqlx v1.4.1`
 directive does not work: the fork imports its own `reflectx` package under
 the new path, and Go refuses to use one module under two paths. Rewrite the
 imports instead.
 
-## Recent Changes
+> [!IMPORTANT]
+> Four documented behaviours changed in v1.4.1. Each one fixes a long-standing
+> upstream issue, but check your queries for them:
+>
+> - `::` is a PostgreSQL cast and passes through untouched. The old escape that
+>   turned `::` into `:` is gone, so a query that wrote `::::` now writes `::`.
+> - `??` is a literal `?` in `In` and `Rebind`, so the PostgreSQL JSONB
+>   operators `??`, `??|` and `??&` can be written as pgJDBC and squirrel do.
+> - `In` expands an empty or nil slice to `NULL` instead of returning an error.
+>   `x IN (NULL)` and `x NOT IN (NULL)` both match no row. Code that used the
+>   error as an empty-list guard must check the length itself.
+> - A parameter name cannot start with a digit, so `:1` is text.
 
-1.4.1:
+## Features
 
-* named queries, `In` and `Rebind` skip string literals, quoted identifiers and comments; `::` casts work as written
-* `In` expands an empty slice to `NULL`; `??` is a literal `?`
-* `Tx.NamedQueryContext`; batch inserts without a column list; pointer arguments to named queries
-* statements prepared on a `Conn` keep its mapper; `Tx.Stmtx` keeps `unsafe`; `NextResultSet` resets the field cache
-* requires Go 1.24; see [CHANGELOG.md](CHANGELOG.md) for every change and its upstream credit
+**Scan into structs, with embedded structs.** Columns map to fields through
+the `db` tag, or the lowercased field name when there is no tag.
 
-1.3.0:
+```go
+type Address struct {
+	City    string
+	Country string
+}
 
-* `sqlx.DB.Connx(context.Context) *sqlx.Conn`
-* `sqlx.BindDriver(driverName, bindType)`
-* support for `[]map[string]interface{}` to do "batch" insertions
-* allocation & perf improvements for `sqlx.In`
+type Person struct {
+	FirstName string `db:"first_name"`
+	Email     string
+	Address   // embedded: city and country come from the same row
+}
 
-DB.Connx returns an `sqlx.Conn`, which is an `sql.Conn`-alike consistent with
-sqlx's wrapping of other types.
+var p Person
+err := db.Get(&p, "SELECT first_name, email, city, country FROM person WHERE id = $1", 1)
 
-`BindDriver` allows users to control the bindvars that sqlx will use for drivers,
-and add new drivers at runtime.  This results in a very slight performance hit
-when resolving the driver into a bind type (~40ns per call), but it allows users
-to specify what bindtype their driver uses even when sqlx has not been updated
-to know about it by default.
+var people []Person
+err = db.Select(&people, "SELECT first_name, email, city, country FROM person")
+```
 
-### Backwards Compatibility
+**Named queries** take a struct, a map, or a pointer to either. Prepared named
+statements keep the parameter order for you.
 
-Compatibility with the most recent two versions of Go is a requirement for any
-new changes.  Compatibility beyond that is not guaranteed.
+```go
+_, err := db.NamedExec(`INSERT INTO person (first_name, email) VALUES (:first_name, :email)`, p)
 
-Versioning is done with Go modules.  Breaking changes (eg. removing deprecated API)
-will get major version number bumps.
+rows, err := db.NamedQuery(`SELECT * FROM person WHERE first_name = :first`,
+	map[string]any{"first": "Jane"})
+defer rows.Close()
 
-## install
+stmt, err := db.PrepareNamed(`SELECT * FROM person WHERE email = :email`)
+err = stmt.Get(&p, map[string]any{"email": "jane@example.com"})
+```
 
-    go get github.com/secondwindoss/sqlx@v1.4.1
+**`In` and `Rebind`** expand a slice into a placeholder list and translate `?`
+to the placeholder style of your driver. `In` always takes `?`, even on
+PostgreSQL; `Rebind` turns it into `$1`.
 
-sqlx requires Go 1.24 or newer.
+```go
+ids := []int{4, 8, 15}
+query, args, err := sqlx.In("SELECT * FROM person WHERE id IN (?)", ids)
+// query: SELECT * FROM person WHERE id IN (?, ?, ?)
 
-## issues
+query = db.Rebind(query) // $1, $2, $3 on PostgreSQL; ? stays ? on MySQL and SQLite
+err = db.Select(&people, query, args...)
+```
 
-Row headers can be ambiguous (`SELECT 1 AS a, 2 AS a`), and the result of
-`Columns()` does not fully qualify column names in queries like:
+**Batch inserts** expand one `VALUES` group per element of a slice of structs
+or maps.
+
+```go
+people := []Person{
+	{FirstName: "Ardie", Email: "asavea@ab.co.nz"},
+	{FirstName: "Ngani", Email: "nlaumape@ab.co.nz"},
+}
+_, err := db.NamedExec(`INSERT INTO person (first_name, email) VALUES (:first_name, :email)`, people)
+```
+
+**Transactions and prepared statements** have the same extensions as `DB`.
+
+```go
+tx := db.MustBegin()
+tx.MustExec("INSERT INTO place (country, telcode) VALUES ($1, $2)", "Singapore", 65)
+tx.NamedExec(`INSERT INTO place (country, telcode) VALUES (:country, :telcode)`,
+	Place{Country: "Hong Kong", TelCode: 852})
+if err := tx.Commit(); err != nil {
+	log.Fatalln(err)
+}
+
+stmt, err := db.Preparex("SELECT * FROM place WHERE telcode = $1")
+var place Place
+err = stmt.Get(&place, 65)
+```
+
+**Row by row, maps and slices** when a struct is the wrong shape.
+
+```go
+rows, err := db.Queryx("SELECT * FROM place")
+for rows.Next() {
+	var place Place
+	if err := rows.StructScan(&place); err != nil {
+		log.Fatalln(err)
+	}
+}
+
+row := map[string]any{}
+err = db.QueryRowx("SELECT * FROM place WHERE telcode = $1", 65).MapScan(row)
+```
+
+Every method has a `Context` variant: `GetContext`, `SelectContext`,
+`NamedExecContext`, `NamedQueryContext` and so on. The
+[API reference](https://pkg.go.dev/github.com/secondwindoss/sqlx) lists them
+all.
+
+## What v1.4.1 fixes
+
+| Before                                                                  | Now                                                        | Upstream                       |
+|-------------------------------------------------------------------------|------------------------------------------------------------|--------------------------------|
+| A `?` or `:` inside a string literal or a comment became a placeholder  | A SQL scanner skips literals, quoted identifiers, comments | [#984], [#151], [#768], [#474] |
+| `now()::date` in a named query broke the cast                           | `::` is a cast and passes through                          | [#428], [#650], [#956]         |
+| PostgreSQL `?` JSONB operators could not be used with `In` or `Rebind`  | `??` is a literal `?`                                      | [#628]                         |
+| `In` with an empty slice returned an error                              | Expands to `NULL`, matches no row                          | [#945]                         |
+| `In` panicked on a nil pointer that implements `driver.Valuer`          | Treated as `NULL`                                          | [#953]                         |
+| Batch insert failed without a column list, in a `FROM`, or on a new line | All three forms expand                                    | [#962]                         |
+| Named queries rejected a pointer to a slice or a map                    | Accepted                                                   | [#805]                         |
+| A statement prepared on a `Conn` lost the `Conn`'s mapper               | Kept                                                       | [#993]                         |
+| `Tx.Stmtx` dropped the transaction's `unsafe` flag                      | Kept                                                       | [#979]                         |
+| `Rows.NextResultSet` panicked when the next set had other columns       | Field cache reset                                          | [#858]                         |
+| `ConnectContext` leaked the pool when the ping failed                   | Closes it, like `Connect`                                  | [#561]                         |
+| No `Tx.NamedQueryContext`                                               | Added                                                      | [#724]                         |
+
+[CHANGELOG.md](CHANGELOG.md) lists every change with the fork pull request,
+the upstream pull request and its author.
+
+## Compatibility
+
+**Go.** The two most recent Go releases are supported, as in the
+[Go release policy](https://go.dev/doc/devel/release#policy). CI runs the race
+tests on Go 1.24, 1.25, oldstable and stable.
+
+**Databases.** CI tests every change against PostgreSQL 16, MySQL 8 and
+SQLite. Any `database/sql` driver works; sqlx only needs to know its
+placeholder style.
+
+| Placeholder | Drivers                                                                   |
+|-------------|---------------------------------------------------------------------------|
+| `$1`        | `postgres`, `pgx`, `cockroach`, `pq-timeouts`, `cloudsqlpostgres`, `nrpostgres`, `ql` |
+| `?`         | `mysql`, `sqlite3`, `nrmysql`, `nrsqlite3`                                 |
+| `:name`     | `oci8`, `ora`, `goracle`, `godror`                                        |
+| `@p1`       | `sqlserver`, `azuresql`                                                   |
+
+Register any other driver at startup with `sqlx.BindDriver("mydriver", sqlx.DOLLAR)`.
+
+## Known limitations
+
+Row headers can be ambiguous (`SELECT 1 AS a, 2 AS a`), and `Columns()` does
+not qualify column names in queries like:
 
 ```sql
 SELECT a.id, a.name, b.id, b.name FROM foos AS a JOIN foos AS b ON a.parent = b.id;
 ```
 
-making a struct or map destination ambiguous.  Use `AS` in your queries
-to give columns distinct names, `rows.Scan` to scan them manually, or 
-`SliceScan` to get a slice of results.
+making a struct or map destination ambiguous. Use `AS` to give columns
+distinct names, `rows.Scan` to scan them manually, or `SliceScan` to get a
+slice of results.
 
-## usage
+## Documentation
 
-Below is an example which shows some common use cases for sqlx.  Check 
-[sqlx_test.go](https://github.com/secondwindoss/sqlx/blob/master/sqlx_test.go) for more
-usage.
+- [API reference](https://pkg.go.dev/github.com/secondwindoss/sqlx) on pkg.go.dev.
+- Upstream's [user guide](https://jmoiron.github.io/sqlx/) explains how to use
+  `database/sql` together with sqlx. Everything in it applies to the fork
+  under the new import path.
+- [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md) and
+  [SECURITY.md](SECURITY.md).
 
+## Project status and versioning
+
+The fork follows [semantic versioning](https://semver.org). The v1 line keeps
+the upstream API: `apidiff` runs against the v1.4.0 tag on every pull request
+and fails on any incompatible change. A breaking change, such as removing a
+deprecated API, gets a major version bump.
+
+Upstream fixes are merged with their original commits, so each author keeps
+the credit in the history and in the changelog. Bug reports and pull requests
+are welcome in this repository; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Credits and license
+
+sqlx was created by [Jason Moiron](https://github.com/jmoiron) in 2013 and
+maintained upstream until 2024. This fork keeps the full upstream history and
+has been maintained by [secondwindoss](https://github.com/secondwindoss) since
+2026. Licensed under the [MIT License](LICENSE).
+
+## Full example
+
+<details>
+<summary>The complete walkthrough from the upstream README, updated for the fork</summary>
 
 ```go
 package main
@@ -258,3 +453,23 @@ func main() {
         VALUES (:first_name, :last_name, :email)`, personMaps)
 }
 ```
+
+</details>
+
+[#151]: https://github.com/jmoiron/sqlx/pull/151
+[#428]: https://github.com/jmoiron/sqlx/issues/428
+[#474]: https://github.com/jmoiron/sqlx/pull/474
+[#561]: https://github.com/jmoiron/sqlx/pull/561
+[#628]: https://github.com/jmoiron/sqlx/issues/628
+[#650]: https://github.com/jmoiron/sqlx/issues/650
+[#724]: https://github.com/jmoiron/sqlx/pull/724
+[#768]: https://github.com/jmoiron/sqlx/pull/768
+[#805]: https://github.com/jmoiron/sqlx/pull/805
+[#858]: https://github.com/jmoiron/sqlx/pull/858
+[#945]: https://github.com/jmoiron/sqlx/pull/945
+[#953]: https://github.com/jmoiron/sqlx/pull/953
+[#956]: https://github.com/jmoiron/sqlx/issues/956
+[#962]: https://github.com/jmoiron/sqlx/pull/962
+[#979]: https://github.com/jmoiron/sqlx/pull/979
+[#984]: https://github.com/jmoiron/sqlx/pull/984
+[#993]: https://github.com/jmoiron/sqlx/pull/993
