@@ -50,6 +50,11 @@ On Linux drop the `''` after `sed -i`. Tags up to v1.4.0 are upstream's and
 declare the upstream module path, so v1.4.1 is the first version that resolves
 under the new path.
 
+A `replace github.com/jmoiron/sqlx => github.com/secondwindoss/sqlx v1.4.1`
+directive does not work: the fork imports its own `reflectx` package under
+the new path, and Go refuses to use one module under two paths. Rewrite the
+imports instead.
+
 ## Recent Changes
 
 1.4.1:
