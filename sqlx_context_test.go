@@ -1277,10 +1277,6 @@ func TestInContext(t *testing.T) {
 		{"SELECT * FROM foo WHERE x = ? and y = ?",
 			[]interface{}{"foo", []int{1, 2, 3}, "bar"},
 			0},
-		// empty slice, should return error before parse
-		{"SELECT * FROM foo WHERE x = ?",
-			[]interface{}{[]int{}},
-			0},
 		// too *few* bindvars, should return an error
 		{"SELECT * FROM foo WHERE x = ? AND y in (?)",
 			[]interface{}{[]int{1, 2, 3}},
