@@ -41,7 +41,7 @@ and go from query to struct in one call with `Get` and `Select`.
 
 |                    | jmoiron/sqlx                 | secondwindoss/sqlx                |
 |--------------------|------------------------------|-----------------------------------|
-| Last release       | v1.4.0, April 2024           | v1.4.1, October 2026              |
+| Last release       | v1.4.0, April 2024           | v1.4.2, October 2026              |
 | Last commit        | May 2024                     | active                            |
 | Open pull requests | 79 (October 2026)            | 0, the fixes are merged           |
 | Go support         | `go 1.10`, untested          | Go 1.24 and newer, tested         |
@@ -49,7 +49,7 @@ and go from query to struct in one call with `Get` and `Select`.
 
 ## Quick start
 
-    go get github.com/secondwindoss/sqlx@v1.4.1
+    go get github.com/secondwindoss/sqlx@v1.4.2
 
 sqlx requires Go 1.24 or newer.
 
@@ -109,19 +109,20 @@ Rewrite the import path, then update the dependency.
 macOS:
 
     grep -rl 'github.com/jmoiron/sqlx' --include='*.go' . | xargs sed -i '' 's#github.com/jmoiron/sqlx#github.com/secondwindoss/sqlx#g'
-    go get github.com/secondwindoss/sqlx@v1.4.1
+    go get github.com/secondwindoss/sqlx@v1.4.2
     go mod tidy
 
 Linux:
 
     grep -rl 'github.com/jmoiron/sqlx' --include='*.go' . | xargs sed -i 's#github.com/jmoiron/sqlx#github.com/secondwindoss/sqlx#g'
-    go get github.com/secondwindoss/sqlx@v1.4.1
+    go get github.com/secondwindoss/sqlx@v1.4.2
     go mod tidy
 
 Tags up to v1.4.0 are upstream's and declare the upstream module path, so
-v1.4.1 is the first version that resolves under the new path.
+v1.4.1 is the first version that resolves under the new path; v1.4.2 retracts
+the older tags so the go command no longer offers them.
 
-A `replace github.com/jmoiron/sqlx => github.com/secondwindoss/sqlx v1.4.1`
+A `replace github.com/jmoiron/sqlx => github.com/secondwindoss/sqlx v1.4.2`
 directive does not work: the fork imports its own `reflectx` package under
 the new path, and Go refuses to use one module under two paths. Rewrite the
 imports instead.
