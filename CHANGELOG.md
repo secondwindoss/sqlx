@@ -4,6 +4,21 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
+## Unreleased
+
+### Fixes
+
+- A batch insert (a slice or array passed to `NamedExec`, `BindNamed` and the
+  like) whose `VALUES (` group never closes now returns the error
+  `missing closing bracket in VALUES`, whatever the number of rows. Before, the
+  query came back unexpanded with every row's arguments, and the mistake only
+  surfaced when the database rejected the argument count. Single-struct and map
+  arguments are unchanged.
+- The batch insert expansion skips brackets inside string literals, quoted
+  identifiers and comments. `VALUES (:a, ')')` or `VALUES (:a, /* ) */ :b)`
+  with several rows used to be cut at the bracket inside the literal or comment
+  and expanded into invalid SQL; `VALUES (:a, '(')` was not expanded at all.
+
 ## v1.4.2 (2026-10-19)
 
 No API change. sqlx's `go.mod` now requires no other module, so importing sqlx
