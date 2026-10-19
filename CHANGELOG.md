@@ -4,7 +4,11 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
-## Unreleased
+## v1.4.3 (2026-10-19)
+
+No API change. Batch inserts report an unclosed `VALUES (` group instead of
+producing SQL the database rejects, and expand correctly when the group holds a
+bracket inside a string literal or comment.
 
 ### Fixes
 
@@ -13,11 +17,12 @@ upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
   `missing closing bracket in VALUES`, whatever the number of rows. Before, the
   query came back unexpanded with every row's arguments, and the mistake only
   surfaced when the database rejected the argument count. Single-struct and map
-  arguments are unchanged.
+  arguments are unchanged (#36).
 - The batch insert expansion skips brackets inside string literals, quoted
   identifiers and comments. `VALUES (:a, ')')` or `VALUES (:a, /* ) */ :b)`
   with several rows used to be cut at the bracket inside the literal or comment
-  and expanded into invalid SQL; `VALUES (:a, '(')` was not expanded at all.
+  and expanded into invalid SQL; `VALUES (:a, '(')` was not expanded at all
+  (#36).
 
 ## v1.4.2 (2026-10-19)
 
