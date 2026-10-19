@@ -13,6 +13,7 @@
 <p align="center">
   <a href="https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/secondwindoss/sqlx/actions/workflows/ci.yml/badge.svg?branch=master"></a>
   <a href="https://pkg.go.dev/github.com/secondwindoss/sqlx"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/secondwindoss/sqlx.svg"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/secondwindoss/sqlx"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/secondwindoss/sqlx/badge"></a>
   <a href="go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/secondwindoss/sqlx"></a>
   <a href="https://github.com/secondwindoss/sqlx/releases"><img alt="Release" src="https://img.shields.io/github/v/release/secondwindoss/sqlx"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
