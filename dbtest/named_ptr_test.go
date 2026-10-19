@@ -1,6 +1,10 @@
-package sqlx
+package dbtest
 
-import "testing"
+import (
+	"testing"
+
+	. "github.com/secondwindoss/sqlx"
+)
 
 // Named queries accept a pointer to a slice, to a map and to a slice of maps
 // (upstream #577, #729).

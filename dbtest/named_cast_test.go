@@ -1,6 +1,10 @@
-package sqlx
+package dbtest
 
-import "testing"
+import (
+	"testing"
+
+	. "github.com/secondwindoss/sqlx"
+)
 
 // A Postgres cast attached to a named parameter binds the parameter and keeps
 // the cast (upstream #983); a cast elsewhere in the query is left alone

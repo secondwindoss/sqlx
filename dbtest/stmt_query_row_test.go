@@ -1,8 +1,10 @@
-package sqlx
+package dbtest
 
 import (
 	"context"
 	"testing"
+
+	. "github.com/secondwindoss/sqlx"
 )
 
 // *Stmt promotes (*sql.Stmt).QueryRowContext(ctx, args...): the first

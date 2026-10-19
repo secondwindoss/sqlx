@@ -4,6 +4,10 @@ updates:
   directory: /
   schedule:
     interval: monthly
+- package-ecosystem: gomod
+  directory: /dbtest
+  schedule:
+    interval: monthly
 - package-ecosystem: github-actions
   directory: /
   schedule:

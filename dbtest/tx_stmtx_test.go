@@ -1,12 +1,16 @@
-package sqlx
+package dbtest
 
 import (
 	"context"
 	"testing"
+
+	. "github.com/secondwindoss/sqlx"
 )
 
 // Tx.Stmtx and Tx.StmtxContext keep the transaction's unsafe flag, and keep
-// the wrapped statement's own unsafe flag (upstream #979).
+// the wrapped statement's own unsafe flag (upstream #979). The flag is checked
+// through its effect: an unsafe Stmt scans into a struct that lacks some of the
+// selected columns, a safe one returns a missing destination error.
 func TestTxStmtxKeepsUnsafe(t *testing.T) {
 	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
 		loadDefaultFixture(db, t)
@@ -20,26 +24,20 @@ func TestTxStmtxKeepsUnsafe(t *testing.T) {
 		var partial struct {
 			FirstName string `db:"first_name"`
 		}
+		if err := stmt.Get(&partial, "Jason"); err == nil {
+			t.Fatal("precondition: Get into partial struct through a safe Stmt succeeded")
+		}
 
 		tx, err := db.Unsafe().Beginx()
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer tx.Rollback()
-		if !tx.unsafe {
-			t.Fatal("precondition: tx from db.Unsafe() should be unsafe")
-		}
 		ts := tx.Stmtx(stmt)
-		if !ts.unsafe {
-			t.Error("Stmtx: unsafe Tx returned a safe Stmt")
-		}
 		if err := ts.Get(&partial, "Jason"); err != nil {
 			t.Errorf("Stmtx: Get into partial struct: %v", err)
 		}
 		tsc := tx.StmtxContext(ctx, stmt)
-		if !tsc.unsafe {
-			t.Error("StmtxContext: unsafe Tx returned a safe Stmt")
-		}
 		if err := tsc.GetContext(ctx, &partial, "Jason"); err != nil {
 			t.Errorf("StmtxContext: Get into partial struct: %v", err)
 		}
@@ -51,14 +49,11 @@ func TestTxStmtxKeepsUnsafe(t *testing.T) {
 		}
 		defer safeTx.Rollback()
 		us := safeTx.Stmtx(stmt.Unsafe())
-		if !us.unsafe {
-			t.Error("Stmtx: unsafe Stmt wrapped in a safe Tx became safe")
-		}
 		if err := us.Get(&partial, "Jason"); err != nil {
 			t.Errorf("Stmtx: Get through unsafe Stmt in safe Tx: %v", err)
 		}
-		if ss := safeTx.StmtxContext(ctx, stmt); ss.unsafe {
-			t.Error("StmtxContext: safe Stmt in safe Tx became unsafe")
+		if err := safeTx.StmtxContext(ctx, stmt).GetContext(ctx, &partial, "Jason"); err == nil {
+			t.Error("StmtxContext: safe Stmt in safe Tx became unsafe (Get into partial struct succeeded)")
 		}
 	})
 }

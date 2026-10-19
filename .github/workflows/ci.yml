@@ -27,19 +27,31 @@ jobs:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: stable
+    - name: Root module requires no other module
+      # The database drivers belong to the dbtest module only; a requirement
+      # here would reach every consumer's module graph.
+      run: |
+        out="$(go list -m all)"
+        if [ "$out" != "$(go list -m)" ]; then echo "go.mod requires:"; echo "$out"; exit 1; fi
     - name: go vet
-      run: go vet ./...
+      run: |
+        go vet ./...
+        (cd dbtest && go vet ./...)
     - name: staticcheck
       # v0.8.1 cannot read Go 1.27.2 export data ("export data version 5 is greater than maximum
       # supported version 4"). This master build from 2026-10-09 can; pin a tagged release again
       # once one is published.
-      run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20261009230814-452d5bb86b45 -checks=all ./...
+      run: |
+        go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20261009230814-452d5bb86b45 -checks=all ./...
+        (cd dbtest && go run honnef.co/go/tools/cmd/staticcheck@v0.7.0-0.dev.0.20261009230814-452d5bb86b45 -checks=all ./...)
     - name: goimports
       run: |
         out="$(go run golang.org/x/tools/cmd/goimports@v0.52.0 -l -local "$(go list -m)" .)"
         if [ -n "$out" ]; then echo "goimports would change:"; echo "$out"; exit 1; fi
     - name: govulncheck
-      run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      run: |
+        go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        (cd dbtest && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...)
 
   test:
     runs-on: ubuntu-latest
@@ -85,11 +97,14 @@ jobs:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: ${{ matrix.go }}
-    - name: Test with the race detector against Postgres, MySQL and SQLite
+    - name: Unit tests with the race detector
+      run: go test -race -count=1 ./...
+    - name: Database tests with the race detector against Postgres, MySQL and SQLite
+      working-directory: dbtest
       env:
         SQLX_SQLITE_DSN: ${{ runner.temp }}/sqlx.db
       run: |
-        go test -race -count=1 -v ./... 2>&1 | tee test.log
+        go test -race -count=1 -v ./... 2>&1 | tee ../test.log
         test "${PIPESTATUS[0]}" -eq 0
     - name: Fail if a database was skipped
       # init() prints "Disabling ..." and the schema tests then run zero rounds for that database.

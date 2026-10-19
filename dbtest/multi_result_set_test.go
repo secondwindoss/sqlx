@@ -1,6 +1,10 @@
-package sqlx
+package dbtest
 
-import "testing"
+import (
+	"testing"
+
+	. "github.com/secondwindoss/sqlx"
+)
 
 // Scanning a second result set with a different column layout must not reuse
 // the first set's field cache (upstream #380, #857; test from upstream #747).

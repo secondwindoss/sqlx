@@ -1,12 +1,14 @@
 //go:build go1.8
 // +build go1.8
 
-package sqlx
+package dbtest
 
 import (
 	"context"
 	"database/sql"
 	"testing"
+
+	. "github.com/secondwindoss/sqlx"
 )
 
 func TestNamedContextQueries(t *testing.T) {
