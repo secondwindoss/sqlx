@@ -4,6 +4,19 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
+## Unreleased
+
+### Module and toolchain
+
+- sqlx's `go.mod` requires no other module. The tests that run against
+  Postgres, MySQL and SQLite move to the nested module `dbtest/`, which holds
+  the three drivers, so `go-sql-driver/mysql`, `lib/pq` and `go-sqlite3` no
+  longer enter the module graph of a program that imports sqlx. Before, Go's
+  minimum version selection raised a consumer's own MySQL driver to v1.10.1
+  even though sqlx only used it in tests (upstream #642, #569, #849). The
+  checks in three tests that read the unexported `unsafe` field now test its
+  effect instead: scanning into a struct that lacks some selected columns.
+
 ## v1.4.1 (2026-10-10)
 
 The first fork release. It keeps every exported identifier of v1.4.0 (CI runs

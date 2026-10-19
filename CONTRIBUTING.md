@@ -7,14 +7,18 @@ Bug reports, fixes, tests and documentation are all welcome.
 Open an issue with the bug report template. The driver and database
 version, the SQL, the struct or map you bind or scan, and what you expected
 are what make a report reproducible. A failing test in the style of
-`sqlx_test.go` is the best report of all. Questions about how to use sqlx go
+`dbtest/sqlx_test.go` is the best report of all. Questions about how to use sqlx go
 to [Discussions](https://github.com/secondwindoss/sqlx/discussions).
 
 ## Making a change
 
 1. Branch from `master`.
-2. Add or update a test. The suite always runs against SQLite and also runs
-   against Postgres and MySQL when their DSN variables are set:
+2. Add or update a test. Tests that need no database live next to the code
+   in the root module and run with `make test`. Tests that talk to a database
+   live in `dbtest/`, a separate module, so that the drivers never appear in
+   sqlx's own `go.mod` or in the module graph of anyone who imports it. The
+   database suite always runs against SQLite and also runs against Postgres
+   and MySQL when their DSN variables are set:
 
        docker run -d --name sqlx-pg -e POSTGRES_PASSWORD=sqlx -p 5432:5432 postgres:16
        docker run -d --name sqlx-mysql -e MYSQL_ROOT_PASSWORD=sqlx -e MYSQL_DATABASE=sqlx -p 3306:3306 mysql:8
@@ -31,7 +35,7 @@ to [Discussions](https://github.com/secondwindoss/sqlx/discussions).
    `go test -run TestGolden -update`, review the diff of
    `testdata/golden.txt`, and mention the changed lines in the pull request.
 4. Open a pull request against `master`. CI runs the lint job and the race
-   tests on Go 1.23 to stable with all three databases and must be green
+   tests on Go 1.24 to stable with all three databases and must be green
    before the merge.
 
 Keep the exported API unchanged within v1 unless the change is purely

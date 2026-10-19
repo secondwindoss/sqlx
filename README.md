@@ -265,7 +265,9 @@ tests on Go 1.24, 1.25, oldstable and stable.
 
 **Databases.** CI tests every change against PostgreSQL 16, MySQL 8 and
 SQLite. Any `database/sql` driver works; sqlx only needs to know its
-placeholder style.
+placeholder style. sqlx's `go.mod` requires no other module: the drivers used
+by the database tests live in the separate `dbtest/` module, so importing sqlx
+never changes which driver version your program builds with.
 
 | Placeholder | Drivers                                                                   |
 |-------------|---------------------------------------------------------------------------|

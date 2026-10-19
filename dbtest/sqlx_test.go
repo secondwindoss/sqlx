@@ -1,6 +1,3 @@
-//go:build go1.8
-// +build go1.8
-
 // The following environment variables, if set, will be used:
 //
 //   - SQLX_SQLITE_DSN
@@ -10,17 +7,21 @@
 // Set any of these variables to 'skip' to skip them.  Note that for MySQL,
 // the string '?parseTime=True' will be appended to the DSN if it's not there
 // already.
-package sqlx
+package dbtest
 
 import (
-	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	. "github.com/secondwindoss/sqlx"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -29,66 +30,240 @@ import (
 	"github.com/secondwindoss/sqlx/reflectx"
 )
 
-func MultiExecContext(ctx context.Context, e ExecerContext, query string) {
+var TestPostgres = true
+
+var TestSqlite = true
+
+var TestMysql = true
+
+var sldb *DB
+
+var pgdb *DB
+
+var mysqldb *DB
+
+func init() {
+	ConnectAll()
+}
+
+func ConnectAll() {
+	var err error
+
+	pgdsn := os.Getenv("SQLX_POSTGRES_DSN")
+	mydsn := os.Getenv("SQLX_MYSQL_DSN")
+	sqdsn := os.Getenv("SQLX_SQLITE_DSN")
+
+	TestPostgres = pgdsn != "skip"
+	TestMysql = mydsn != "skip"
+	TestSqlite = sqdsn != "skip"
+
+	if !strings.Contains(mydsn, "parseTime=true") {
+		mydsn += "?parseTime=true"
+	}
+
+	if TestPostgres {
+		pgdb, err = Connect("postgres", pgdsn)
+		if err != nil {
+			fmt.Printf("Disabling PG tests:\n    %v\n", err)
+			TestPostgres = false
+		}
+	} else {
+		fmt.Println("Disabling Postgres tests.")
+	}
+
+	if TestMysql {
+		mysqldb, err = Connect("mysql", mydsn)
+		if err != nil {
+			fmt.Printf("Disabling MySQL tests:\n    %v", err)
+			TestMysql = false
+		}
+	} else {
+		fmt.Println("Disabling MySQL tests.")
+	}
+
+	if TestSqlite {
+		sldb, err = Connect("sqlite3", sqdsn)
+		if err != nil {
+			fmt.Printf("Disabling SQLite:\n    %v", err)
+			TestSqlite = false
+		}
+	} else {
+		fmt.Println("Disabling SQLite tests.")
+	}
+}
+
+type Schema struct {
+	create string
+	drop   string
+}
+
+func (s Schema) Postgres() (string, string, string) {
+	return s.create, s.drop, `now()`
+}
+
+func (s Schema) MySQL() (string, string, string) {
+	return strings.Replace(s.create, `"`, "`", -1), s.drop, `now()`
+}
+
+func (s Schema) Sqlite3() (string, string, string) {
+	return strings.Replace(s.create, `now()`, `CURRENT_TIMESTAMP`, -1), s.drop, `CURRENT_TIMESTAMP`
+}
+
+var defaultSchema = Schema{
+	create: `
+CREATE TABLE person (
+	first_name text,
+	last_name text,
+	email text,
+	added_at timestamp default now()
+);
+
+CREATE TABLE place (
+	country text,
+	city text NULL,
+	telcode integer
+);
+
+CREATE TABLE capplace (
+	"COUNTRY" text,
+	"CITY" text NULL,
+	"TELCODE" integer
+);
+
+CREATE TABLE nullperson (
+    first_name text NULL,
+    last_name text NULL,
+    email text NULL
+);
+
+CREATE TABLE employees (
+	name text,
+	id integer,
+	boss_id integer
+);
+
+`,
+	drop: `
+drop table person;
+drop table place;
+drop table capplace;
+drop table nullperson;
+drop table employees;
+`,
+}
+
+type Person struct {
+	FirstName string `db:"first_name"`
+	LastName  string `db:"last_name"`
+	Email     string
+	AddedAt   time.Time `db:"added_at"`
+}
+
+type Person2 struct {
+	FirstName sql.NullString `db:"first_name"`
+	LastName  sql.NullString `db:"last_name"`
+	Email     sql.NullString
+}
+
+type Place struct {
+	Country string
+	City    sql.NullString
+	TelCode int
+}
+
+type PlacePtr struct {
+	Country string
+	City    *string
+	TelCode int
+}
+
+type PersonPlace struct {
+	Person
+	Place
+}
+
+type PersonPlacePtr struct {
+	*Person
+	*Place
+}
+
+type EmbedConflict struct {
+	FirstName string `db:"first_name"`
+	Person
+}
+
+type SliceMember struct {
+	Country   string
+	City      sql.NullString
+	TelCode   int
+	People    []Person `db:"-"`
+	Addresses []Place  `db:"-"`
+}
+
+// Note that because of field map caching, we need a new type here
+// if we've used Place already somewhere in sqlx
+type CPlace Place
+
+func MultiExec(e Execer, query string) {
 	stmts := strings.Split(query, ";\n")
 	if len(strings.Trim(stmts[len(stmts)-1], " \n\t\r")) == 0 {
 		stmts = stmts[:len(stmts)-1]
 	}
 	for _, s := range stmts {
-		_, err := e.ExecContext(ctx, s)
+		_, err := e.Exec(s)
 		if err != nil {
 			fmt.Println(err, s)
 		}
 	}
 }
 
-func RunWithSchemaContext(ctx context.Context, schema Schema, t *testing.T, test func(ctx context.Context, db *DB, t *testing.T)) {
-	runner := func(ctx context.Context, db *DB, t *testing.T, create, drop, now string) {
+func RunWithSchema(schema Schema, t *testing.T, test func(db *DB, t *testing.T, now string)) {
+	runner := func(db *DB, t *testing.T, create, drop, now string) {
 		defer func() {
-			MultiExecContext(ctx, db, drop)
+			MultiExec(db, drop)
 		}()
 
-		MultiExecContext(ctx, db, create)
-		test(ctx, db, t)
+		MultiExec(db, create)
+		test(db, t, now)
 	}
 
 	if TestPostgres {
 		create, drop, now := schema.Postgres()
-		runner(ctx, pgdb, t, create, drop, now)
+		runner(pgdb, t, create, drop, now)
 	}
 	if TestSqlite {
 		create, drop, now := schema.Sqlite3()
-		runner(ctx, sldb, t, create, drop, now)
+		runner(sldb, t, create, drop, now)
 	}
 	if TestMysql {
 		create, drop, now := schema.MySQL()
-		runner(ctx, mysqldb, t, create, drop, now)
+		runner(mysqldb, t, create, drop, now)
 	}
 }
 
-func loadDefaultFixtureContext(ctx context.Context, db *DB, t *testing.T) {
-	tx := db.MustBeginTx(ctx, nil)
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?)"), "Jason", "Moiron", "jmoiron@jmoiron.net")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?)"), "John", "Doe", "johndoeDNE@gmail.net")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, city, telcode) VALUES (?, ?, ?)"), "United States", "New York", "1")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Hong Kong", "852")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Singapore", "65")
+func loadDefaultFixture(db *DB, t *testing.T) {
+	tx := db.MustBegin()
+	tx.MustExec(tx.Rebind("INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?)"), "Jason", "Moiron", "jmoiron@jmoiron.net")
+	tx.MustExec(tx.Rebind("INSERT INTO person (first_name, last_name, email) VALUES (?, ?, ?)"), "John", "Doe", "johndoeDNE@gmail.net")
+	tx.MustExec(tx.Rebind("INSERT INTO place (country, city, telcode) VALUES (?, ?, ?)"), "United States", "New York", "1")
+	tx.MustExec(tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Hong Kong", "852")
+	tx.MustExec(tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Singapore", "65")
 	if db.DriverName() == "mysql" {
-		tx.MustExecContext(ctx, tx.Rebind("INSERT INTO capplace (`COUNTRY`, `TELCODE`) VALUES (?, ?)"), "Sarf Efrica", "27")
+		tx.MustExec(tx.Rebind("INSERT INTO capplace (`COUNTRY`, `TELCODE`) VALUES (?, ?)"), "Sarf Efrica", "27")
 	} else {
-		tx.MustExecContext(ctx, tx.Rebind("INSERT INTO capplace (\"COUNTRY\", \"TELCODE\") VALUES (?, ?)"), "Sarf Efrica", "27")
+		tx.MustExec(tx.Rebind("INSERT INTO capplace (\"COUNTRY\", \"TELCODE\") VALUES (?, ?)"), "Sarf Efrica", "27")
 	}
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO employees (name, id) VALUES (?, ?)"), "Peter", "4444")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO employees (name, id, boss_id) VALUES (?, ?, ?)"), "Joe", "1", "4444")
-	tx.MustExecContext(ctx, tx.Rebind("INSERT INTO employees (name, id, boss_id) VALUES (?, ?, ?)"), "Martin", "2", "4444")
+	tx.MustExec(tx.Rebind("INSERT INTO employees (name, id) VALUES (?, ?)"), "Peter", "4444")
+	tx.MustExec(tx.Rebind("INSERT INTO employees (name, id, boss_id) VALUES (?, ?, ?)"), "Joe", "1", "4444")
+	tx.MustExec(tx.Rebind("INSERT INTO employees (name, id, boss_id) VALUES (?, ?, ?)"), "Martin", "2", "4444")
 	tx.Commit()
 }
 
 // Test a new backwards compatible feature, that missing scan destinations
 // will silently scan into sql.RawText rather than failing/panicing
-func TestMissingNamesContextContext(t *testing.T) {
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+func TestMissingNames(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 		type PersonPlus struct {
 			FirstName string `db:"first_name"`
 			LastName  string `db:"last_name"`
@@ -99,21 +274,21 @@ func TestMissingNamesContextContext(t *testing.T) {
 		// test Select first
 		pps := []PersonPlus{}
 		// pps lacks added_at destination
-		err := db.SelectContext(ctx, &pps, "SELECT * FROM person")
+		err := db.Select(&pps, "SELECT * FROM person")
 		if err == nil {
 			t.Error("Expected missing name from Select to fail, but it did not.")
 		}
 
 		// test Get
 		pp := PersonPlus{}
-		err = db.GetContext(ctx, &pp, "SELECT * FROM person LIMIT 1")
+		err = db.Get(&pp, "SELECT * FROM person LIMIT 1")
 		if err == nil {
 			t.Error("Expected missing name Get to fail, but it did not.")
 		}
 
 		// test naked StructScan
 		pps = []PersonPlus{}
-		rows, err := db.QueryContext(ctx, "SELECT * FROM person LIMIT 1")
+		rows, err := db.Query("SELECT * FROM person LIMIT 1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,23 +300,24 @@ func TestMissingNamesContextContext(t *testing.T) {
 		rows.Close()
 
 		// now try various things with unsafe set.
+		safeDB := db
 		db = db.Unsafe()
 		pps = []PersonPlus{}
-		err = db.SelectContext(ctx, &pps, "SELECT * FROM person")
+		err = db.Select(&pps, "SELECT * FROM person")
 		if err != nil {
 			t.Error(err)
 		}
 
 		// test Get
 		pp = PersonPlus{}
-		err = db.GetContext(ctx, &pp, "SELECT * FROM person LIMIT 1")
+		err = db.Get(&pp, "SELECT * FROM person LIMIT 1")
 		if err != nil {
 			t.Error(err)
 		}
 
 		// test naked StructScan
 		pps = []PersonPlus{}
-		rowsx, err := db.QueryxContext(ctx, "SELECT * FROM person LIMIT 1")
+		rowsx, err := db.Queryx("SELECT * FROM person LIMIT 1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,19 +329,17 @@ func TestMissingNamesContextContext(t *testing.T) {
 		rowsx.Close()
 
 		// test Named stmt
-		if !isUnsafe(db) {
-			t.Error("Expected db to be unsafe, but it isn't")
-		}
-		nstmt, err := db.PrepareNamedContext(ctx, `SELECT * FROM person WHERE first_name != :name`)
+		nstmt, err := db.PrepareNamed(`SELECT * FROM person WHERE first_name != :name`)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// its internal stmt should be marked unsafe
-		if !nstmt.Stmt.unsafe {
-			t.Error("expected NamedStmt to be unsafe but its underlying stmt did not inherit safety")
+		pp = PersonPlus{}
+		if err := nstmt.Stmt.Get(&pp, "Jason"); err != nil {
+			t.Errorf("expected NamedStmt to be unsafe but its underlying stmt did not inherit safety: %v", err)
 		}
 		pps = []PersonPlus{}
-		err = nstmt.SelectContext(ctx, &pps, map[string]interface{}{"name": "Jason"})
+		err = nstmt.Select(&pps, map[string]interface{}{"name": "Jason"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,24 +348,24 @@ func TestMissingNamesContextContext(t *testing.T) {
 		}
 
 		// test it with a safe db
-		db.unsafe = false
-		if isUnsafe(db) {
+		db = safeDB
+		pp = PersonPlus{}
+		if err := db.Get(&pp, "SELECT * FROM person LIMIT 1"); err == nil {
 			t.Error("expected db to be safe but it isn't")
 		}
-		nstmt, err = db.PrepareNamedContext(ctx, `SELECT * FROM person WHERE first_name != :name`)
+		nstmt, err = db.PrepareNamed(`SELECT * FROM person WHERE first_name != :name`)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// it should be safe
-		if isUnsafe(nstmt) {
+		pps = []PersonPlus{}
+		if err := nstmt.Select(&pps, map[string]interface{}{"name": "Jason"}); err == nil {
 			t.Error("NamedStmt did not inherit safety")
 		}
+		// and the Select below must succeed once it is made unsafe
 		nstmt.Unsafe()
-		if !isUnsafe(nstmt) {
-			t.Error("expected newly unsafed NamedStmt to be unsafe")
-		}
 		pps = []PersonPlus{}
-		err = nstmt.SelectContext(ctx, &pps, map[string]interface{}{"name": "Jason"})
+		err = nstmt.Select(&pps, map[string]interface{}{"name": "Jason"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -202,16 +376,15 @@ func TestMissingNamesContextContext(t *testing.T) {
 	})
 }
 
-func TestEmbeddedStructsContextContext(t *testing.T) {
+func TestEmbeddedStructs(t *testing.T) {
 	type Loop1 struct{ Person }
 	type Loop2 struct{ Loop1 }
 	type Loop3 struct{ Loop2 }
 
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 		peopleAndPlaces := []PersonPlace{}
-		err := db.SelectContext(
-			ctx,
+		err := db.Select(
 			&peopleAndPlaces,
 			`SELECT person.*, place.* FROM
              person natural join place`)
@@ -228,8 +401,7 @@ func TestEmbeddedStructsContextContext(t *testing.T) {
 		}
 
 		// test embedded structs with StructScan
-		rows, err := db.QueryxContext(
-			ctx,
+		rows, err := db.Queryx(
 			`SELECT person.*, place.* FROM
          person natural join place`)
 		if err != nil {
@@ -254,8 +426,7 @@ func TestEmbeddedStructsContextContext(t *testing.T) {
 
 		// test the same for embedded pointer structs
 		peopleAndPlacesPtrs := []PersonPlacePtr{}
-		err = db.SelectContext(
-			ctx,
+		err = db.Select(
 			&peopleAndPlacesPtrs,
 			`SELECT person.*, place.* FROM
              person natural join place`)
@@ -273,7 +444,7 @@ func TestEmbeddedStructsContextContext(t *testing.T) {
 
 		// test "deep nesting"
 		l3s := []Loop3{}
-		err = db.SelectContext(ctx, &l3s, `select * from person`)
+		err = db.Select(&l3s, `select * from person`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +456,7 @@ func TestEmbeddedStructsContextContext(t *testing.T) {
 
 		// test "embed conflicts"
 		ec := []EmbedConflict{}
-		err = db.SelectContext(ctx, &ec, `select * from person`)
+		err = db.Select(&ec, `select * from person`)
 		// I'm torn between erroring here or having some kind of working behavior
 		// in order to allow for more flexibility in destination structs
 		if err != nil {
@@ -294,7 +465,7 @@ func TestEmbeddedStructsContextContext(t *testing.T) {
 	})
 }
 
-func TestJoinQueryContext(t *testing.T) {
+func TestJoinQuery(t *testing.T) {
 	type Employee struct {
 		Name string
 		ID   int64
@@ -303,15 +474,15 @@ func TestJoinQueryContext(t *testing.T) {
 	}
 	type Boss Employee
 
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 
 		var employees []struct {
 			Employee
 			Boss `db:"boss"`
 		}
 
-		err := db.SelectContext(ctx,
+		err := db.Select(
 			&employees,
 			`SELECT employees.*, boss.id "boss.id", boss.name "boss.name" FROM employees
 			  JOIN employees AS boss ON employees.boss_id = boss.id`)
@@ -330,7 +501,7 @@ func TestJoinQueryContext(t *testing.T) {
 	})
 }
 
-func TestJoinQueryNamedPointerStructsContext(t *testing.T) {
+func TestJoinQueryNamedPointerStructs(t *testing.T) {
 	type Employee struct {
 		Name string
 		ID   int64
@@ -339,8 +510,8 @@ func TestJoinQueryNamedPointerStructsContext(t *testing.T) {
 	}
 	type Boss Employee
 
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 
 		var employees []struct {
 			Emp1  *Employee `db:"emp1"`
@@ -348,7 +519,7 @@ func TestJoinQueryNamedPointerStructsContext(t *testing.T) {
 			*Boss `db:"boss"`
 		}
 
-		err := db.SelectContext(ctx,
+		err := db.Select(
 			&employees,
 			`SELECT emp.name "emp1.name", emp.id "emp1.id", emp.boss_id "emp1.boss_id",
 			 emp.name "emp2.name", emp.id "emp2.id", emp.boss_id "emp2.boss_id",
@@ -370,10 +541,10 @@ func TestJoinQueryNamedPointerStructsContext(t *testing.T) {
 	})
 }
 
-func TestSelectSliceMapTimeContext(t *testing.T) {
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
-		rows, err := db.QueryxContext(ctx, "SELECT * FROM person")
+func TestSelectSliceMapTime(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
+		rows, err := db.Queryx("SELECT * FROM person")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -384,7 +555,7 @@ func TestSelectSliceMapTimeContext(t *testing.T) {
 			}
 		}
 
-		rows, err = db.QueryxContext(ctx, "SELECT * FROM person")
+		rows, err = db.Queryx("SELECT * FROM person")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -399,23 +570,23 @@ func TestSelectSliceMapTimeContext(t *testing.T) {
 	})
 }
 
-func TestNilReceiverContext(t *testing.T) {
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+func TestNilReceiver(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 		var p *Person
-		err := db.GetContext(ctx, p, "SELECT * FROM person LIMIT 1")
+		err := db.Get(p, "SELECT * FROM person LIMIT 1")
 		if err == nil {
 			t.Error("Expected error when getting into nil struct ptr.")
 		}
 		var pp *[]Person
-		err = db.SelectContext(ctx, pp, "SELECT * FROM person")
+		err = db.Select(pp, "SELECT * FROM person")
 		if err == nil {
 			t.Error("Expected an error when selecting into nil slice ptr.")
 		}
 	})
 }
 
-func TestNamedQueryContext(t *testing.T) {
+func TestNamedQuery(t *testing.T) {
 	var schema = Schema{
 		create: `
 			CREATE TABLE place (
@@ -446,7 +617,7 @@ func TestNamedQueryContext(t *testing.T) {
 			`,
 	}
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(schema, t, func(db *DB, t *testing.T, now string) {
 		type Person struct {
 			FirstName sql.NullString `db:"first_name"`
 			LastName  sql.NullString `db:"last_name"`
@@ -460,13 +631,13 @@ func TestNamedQueryContext(t *testing.T) {
 		}
 
 		q1 := `INSERT INTO person (first_name, last_name, email) VALUES (:first_name, :last_name, :email)`
-		_, err := db.NamedExecContext(ctx, q1, p)
+		_, err := db.NamedExec(q1, p)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		p2 := &Person{}
-		rows, err := db.NamedQueryContext(ctx, "SELECT * FROM person WHERE first_name=:first_name", p)
+		rows, err := db.NamedQuery("SELECT * FROM person WHERE first_name=:first_name", p)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -513,7 +684,7 @@ func TestNamedQueryContext(t *testing.T) {
 		}
 
 		q1 = `INSERT INTO jsperson ("FIRST", last_name, "EMAIL") VALUES (:FIRST, :last_name, :EMAIL)`
-		_, err = db.NamedExecContext(ctx, pdb(q1, db), jp)
+		_, err = db.NamedExec(pdb(q1, db), jp)
 		if err != nil {
 			t.Fatal(err, db.DriverName())
 		}
@@ -549,7 +720,7 @@ func TestNamedQueryContext(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err = ns.QueryxContext(ctx, jp)
+		rows, err = ns.Queryx(jp)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,7 +729,7 @@ func TestNamedQueryContext(t *testing.T) {
 
 		// Check exactly the same thing, but with db.NamedQuery, which does not go
 		// through the PrepareNamed/NamedStmt path.
-		rows, err = db.NamedQueryContext(ctx, pdb(`
+		rows, err = db.NamedQuery(pdb(`
 			SELECT * FROM jsperson
 			WHERE
 				"FIRST"=:FIRST AND
@@ -596,7 +767,7 @@ func TestNamedQueryContext(t *testing.T) {
 		}
 
 		q2 := `INSERT INTO place (id, name) VALUES (1, :name)`
-		_, err = db.NamedExecContext(ctx, q2, pl)
+		_, err = db.NamedExec(q2, pl)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -605,13 +776,13 @@ func TestNamedQueryContext(t *testing.T) {
 		pp.Place.ID = id
 
 		q3 := `INSERT INTO placeperson (first_name, last_name, email, place_id) VALUES (:first_name, :last_name, :email, :place.id)`
-		_, err = db.NamedExecContext(ctx, q3, pp)
+		_, err = db.NamedExec(q3, pp)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		pp2 := &PlacePerson{}
-		rows, err = db.NamedQueryContext(ctx, `
+		rows, err = db.NamedQuery(`
 			SELECT
 				first_name,
 				last_name,
@@ -646,7 +817,7 @@ func TestNamedQueryContext(t *testing.T) {
 	})
 }
 
-func TestNilInsertsContext(t *testing.T) {
+func TestNilInserts(t *testing.T) {
 	var schema = Schema{
 		create: `
 			CREATE TABLE tt (
@@ -656,7 +827,7 @@ func TestNilInsertsContext(t *testing.T) {
 		drop: "drop table tt;",
 	}
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(schema, t, func(db *DB, t *testing.T, now string) {
 		type TT struct {
 			ID    int
 			Value *string
@@ -664,8 +835,8 @@ func TestNilInsertsContext(t *testing.T) {
 		var v, v2 TT
 		r := db.Rebind
 
-		db.MustExecContext(ctx, r(`INSERT INTO tt (id) VALUES (1)`))
-		db.GetContext(ctx, &v, r(`SELECT * FROM tt`))
+		db.MustExec(r(`INSERT INTO tt (id) VALUES (1)`))
+		db.Get(&v, r(`SELECT * FROM tt`))
 		if v.ID != 1 {
 			t.Errorf("Expecting id of 1, got %v", v.ID)
 		}
@@ -679,9 +850,9 @@ func TestNilInsertsContext(t *testing.T) {
 		// as reflectx.FieldByIndexes attempts to allocate nil pointer receivers for
 		// writing.  This was fixed by creating & using the reflectx.FieldByIndexesReadOnly
 		// function.  This next line is important as it provides the only coverage for this.
-		db.NamedExecContext(ctx, `INSERT INTO tt (id, value) VALUES (:id, :value)`, v)
+		db.NamedExec(`INSERT INTO tt (id, value) VALUES (:id, :value)`, v)
 
-		db.GetContext(ctx, &v2, r(`SELECT * FROM tt WHERE id=2`))
+		db.Get(&v2, r(`SELECT * FROM tt WHERE id=2`))
 		if v.ID != v2.ID {
 			t.Errorf("%v != %v", v.ID, v2.ID)
 		}
@@ -691,7 +862,7 @@ func TestNilInsertsContext(t *testing.T) {
 	})
 }
 
-func TestScanErrorContext(t *testing.T) {
+func TestScanError(t *testing.T) {
 	var schema = Schema{
 		create: `
 			CREATE TABLE kv (
@@ -701,7 +872,7 @@ func TestScanErrorContext(t *testing.T) {
 		drop: `drop table kv;`,
 	}
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(schema, t, func(db *DB, t *testing.T, now string) {
 		type WrongTypes struct {
 			K int
 			V string
@@ -711,7 +882,7 @@ func TestScanErrorContext(t *testing.T) {
 			t.Error(err)
 		}
 
-		rows, err := db.QueryxContext(ctx, "SELECT * FROM kv")
+		rows, err := db.Queryx("SELECT * FROM kv")
 		if err != nil {
 			t.Error(err)
 		}
@@ -725,21 +896,29 @@ func TestScanErrorContext(t *testing.T) {
 	})
 }
 
-// FIXME: this function is kinda big but it slows things down to be constantly
-// loading and reloading the schema..
+func TestMultiInsert(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
+		q := db.Rebind(`INSERT INTO employees (name, id) VALUES (?, ?), (?, ?);`)
+		db.MustExec(q,
+			"Name1", 400,
+			"name2", 500,
+		)
+	})
+}
 
-func TestUsageContext(t *testing.T) {
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
+func TestUsage(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 		slicemembers := []SliceMember{}
-		err := db.SelectContext(ctx, &slicemembers, "SELECT * FROM place ORDER BY telcode ASC")
+		err := db.Select(&slicemembers, "SELECT * FROM place ORDER BY telcode ASC")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		people := []Person{}
 
-		err = db.SelectContext(ctx, &people, "SELECT * FROM person ORDER BY first_name ASC")
+		err = db.Select(&people, "SELECT * FROM person ORDER BY first_name ASC")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -759,7 +938,7 @@ func TestUsageContext(t *testing.T) {
 		}
 
 		jason = Person{}
-		err = db.GetContext(ctx, &jason, db.Rebind("SELECT * FROM person WHERE first_name=?"), "Jason")
+		err = db.Get(&jason, db.Rebind("SELECT * FROM person WHERE first_name=?"), "Jason")
 
 		if err != nil {
 			t.Fatal(err)
@@ -768,7 +947,7 @@ func TestUsageContext(t *testing.T) {
 			t.Errorf("Expecting to get back Jason, but got %v\n", jason.FirstName)
 		}
 
-		err = db.GetContext(ctx, &jason, db.Rebind("SELECT * FROM person WHERE first_name=?"), "Foobar")
+		err = db.Get(&jason, db.Rebind("SELECT * FROM person WHERE first_name=?"), "Foobar")
 		if err == nil {
 			t.Errorf("Expecting an error, got nil\n")
 		}
@@ -778,7 +957,7 @@ func TestUsageContext(t *testing.T) {
 
 		// The following tests check statement reuse, which was actually a problem
 		// due to copying being done when creating Stmt's which was eventually removed
-		stmt1, err := db.PreparexContext(ctx, db.Rebind("SELECT * FROM person WHERE first_name=?"))
+		stmt1, err := db.Preparex(db.Rebind("SELECT * FROM person WHERE first_name=?"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -789,16 +968,16 @@ func TestUsageContext(t *testing.T) {
 		row = stmt1.QueryRowx("DoesNotExist")
 		row.Scan(&jason)
 
-		err = stmt1.GetContext(ctx, &jason, "DoesNotExist User")
+		err = stmt1.Get(&jason, "DoesNotExist User")
 		if err == nil {
 			t.Error("Expected an error")
 		}
-		err = stmt1.GetContext(ctx, &jason, "DoesNotExist User 2")
+		err = stmt1.Get(&jason, "DoesNotExist User 2")
 		if err == nil {
 			t.Fatal(err)
 		}
 
-		stmt2, err := db.PreparexContext(ctx, db.Rebind("SELECT * FROM person WHERE first_name=?"))
+		stmt2, err := db.Preparex(db.Rebind("SELECT * FROM person WHERE first_name=?"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -807,7 +986,135 @@ func TestUsageContext(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err := tx.NamedQueryContext(ctx, "SELECT * FROM person WHERE first_name=:first", map[string]interface{}{"first": "Bin"})
+		tstmt2 := tx.Stmtx(stmt2)
+		row2 := tstmt2.QueryRowx("Jason")
+		err = row2.StructScan(&jason)
+		if err != nil {
+			t.Error(err)
+		}
+		tx.Commit()
+
+		places := []*Place{}
+		err = db.Select(&places, "SELECT telcode FROM place ORDER BY telcode ASC")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		usa, singsing, honkers := places[0], places[1], places[2]
+
+		if usa.TelCode != 1 || honkers.TelCode != 852 || singsing.TelCode != 65 {
+			t.Errorf("Expected integer telcodes to work, got %#v", places)
+		}
+
+		placesptr := []PlacePtr{}
+		err = db.Select(&placesptr, "SELECT * FROM place ORDER BY telcode ASC")
+		if err != nil {
+			t.Error(err)
+		}
+		// fmt.Printf("%#v\n%#v\n%#v\n", placesptr[0], placesptr[1], placesptr[2])
+
+		// if you have null fields and use SELECT *, you must use sql.Null* in your struct
+		// this test also verifies that you can use either a []Struct{} or a []*Struct{}
+		places2 := []Place{}
+		err = db.Select(&places2, "SELECT * FROM place ORDER BY telcode ASC")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		usa, singsing, honkers = &places2[0], &places2[1], &places2[2]
+
+		// this should return a type error that &p is not a pointer to a struct slice
+		p := Place{}
+		err = db.Select(&p, "SELECT * FROM place ORDER BY telcode ASC")
+		if err == nil {
+			t.Errorf("Expected an error, argument to select should be a pointer to a struct slice")
+		}
+
+		// this should be an error
+		pl := []Place{}
+		err = db.Select(pl, "SELECT * FROM place ORDER BY telcode ASC")
+		if err == nil {
+			t.Errorf("Expected an error, argument to select should be a pointer to a struct slice, not a slice.")
+		}
+
+		if usa.TelCode != 1 || honkers.TelCode != 852 || singsing.TelCode != 65 {
+			t.Errorf("Expected integer telcodes to work, got %#v", places)
+		}
+
+		stmt, err := db.Preparex(db.Rebind("SELECT country, telcode FROM place WHERE telcode > ? ORDER BY telcode ASC"))
+		if err != nil {
+			t.Error(err)
+		}
+
+		places = []*Place{}
+		err = stmt.Select(&places, 10)
+		if len(places) != 2 {
+			t.Error("Expected 2 places, got 0.")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		singsing, honkers = places[0], places[1]
+		if singsing.TelCode != 65 || honkers.TelCode != 852 {
+			t.Errorf("Expected the right telcodes, got %#v", places)
+		}
+
+		rows, err := db.Queryx("SELECT * FROM place")
+		if err != nil {
+			t.Fatal(err)
+		}
+		place := Place{}
+		for rows.Next() {
+			err = rows.StructScan(&place)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		rows, err = db.Queryx("SELECT * FROM place")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]interface{}{}
+		for rows.Next() {
+			err = rows.MapScan(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, ok := m["country"]
+			if !ok {
+				t.Errorf("Expected key `country` in map but could not find it (%#v)\n", m)
+			}
+		}
+
+		rows, err = db.Queryx("SELECT * FROM place")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			s, err := rows.SliceScan()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(s) != 3 {
+				t.Errorf("Expected 3 columns in result, got %d\n", len(s))
+			}
+		}
+
+		// test advanced querying
+		// test that NamedExec works with a map as well as a struct
+		_, err = db.NamedExec("INSERT INTO person (first_name, last_name, email) VALUES (:first, :last, :email)", map[string]interface{}{
+			"first": "Bin",
+			"last":  "Smuth",
+			"email": "bensmith@allblacks.nz",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// ensure that if the named param happens right at the end it still works
+		// ensure that NamedQuery works with a map[string]interface{}
+		rows, err = db.NamedQuery("SELECT * FROM person WHERE first_name=:first", map[string]interface{}{"first": "Bin"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -826,165 +1133,18 @@ func TestUsageContext(t *testing.T) {
 			}
 		}
 
-		tstmt2 := tx.Stmtx(stmt2)
-		row2 := tstmt2.QueryRowx("Jason")
-		err = row2.StructScan(&jason)
-		if err != nil {
-			t.Error(err)
-		}
-		tx.Commit()
-
-		places := []*Place{}
-		err = db.SelectContext(ctx, &places, "SELECT telcode FROM place ORDER BY telcode ASC")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		usa, singsing, honkers := places[0], places[1], places[2]
-
-		if usa.TelCode != 1 || honkers.TelCode != 852 || singsing.TelCode != 65 {
-			t.Errorf("Expected integer telcodes to work, got %#v", places)
-		}
-
-		placesptr := []PlacePtr{}
-		err = db.SelectContext(ctx, &placesptr, "SELECT * FROM place ORDER BY telcode ASC")
-		if err != nil {
-			t.Error(err)
-		}
-		// fmt.Printf("%#v\n%#v\n%#v\n", placesptr[0], placesptr[1], placesptr[2])
-
-		// if you have null fields and use SELECT *, you must use sql.Null* in your struct
-		// this test also verifies that you can use either a []Struct{} or a []*Struct{}
-		places2 := []Place{}
-		err = db.SelectContext(ctx, &places2, "SELECT * FROM place ORDER BY telcode ASC")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		usa, singsing, honkers = &places2[0], &places2[1], &places2[2]
-
-		// this should return a type error that &p is not a pointer to a struct slice
-		p := Place{}
-		err = db.SelectContext(ctx, &p, "SELECT * FROM place ORDER BY telcode ASC")
-		if err == nil {
-			t.Errorf("Expected an error, argument to select should be a pointer to a struct slice")
-		}
-
-		// this should be an error
-		pl := []Place{}
-		err = db.SelectContext(ctx, pl, "SELECT * FROM place ORDER BY telcode ASC")
-		if err == nil {
-			t.Errorf("Expected an error, argument to select should be a pointer to a struct slice, not a slice.")
-		}
-
-		if usa.TelCode != 1 || honkers.TelCode != 852 || singsing.TelCode != 65 {
-			t.Errorf("Expected integer telcodes to work, got %#v", places)
-		}
-
-		stmt, err := db.PreparexContext(ctx, db.Rebind("SELECT country, telcode FROM place WHERE telcode > ? ORDER BY telcode ASC"))
-		if err != nil {
-			t.Error(err)
-		}
-
-		places = []*Place{}
-		err = stmt.SelectContext(ctx, &places, 10)
-		if len(places) != 2 {
-			t.Error("Expected 2 places, got 0.")
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		singsing, honkers = places[0], places[1]
-		if singsing.TelCode != 65 || honkers.TelCode != 852 {
-			t.Errorf("Expected the right telcodes, got %#v", places)
-		}
-
-		rows, err = db.QueryxContext(ctx, "SELECT * FROM place")
-		if err != nil {
-			t.Fatal(err)
-		}
-		place := Place{}
-		for rows.Next() {
-			err = rows.StructScan(&place)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		rows, err = db.QueryxContext(ctx, "SELECT * FROM place")
-		if err != nil {
-			t.Fatal(err)
-		}
-		m := map[string]interface{}{}
-		for rows.Next() {
-			err = rows.MapScan(m)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, ok := m["country"]
-			if !ok {
-				t.Errorf("Expected key `country` in map but could not find it (%#v)\n", m)
-			}
-		}
-
-		rows, err = db.QueryxContext(ctx, "SELECT * FROM place")
-		if err != nil {
-			t.Fatal(err)
-		}
-		for rows.Next() {
-			s, err := rows.SliceScan()
-			if err != nil {
-				t.Error(err)
-			}
-			if len(s) != 3 {
-				t.Errorf("Expected 3 columns in result, got %d\n", len(s))
-			}
-		}
-
-		// test advanced querying
-		// test that NamedExec works with a map as well as a struct
-		_, err = db.NamedExecContext(ctx, "INSERT INTO person (first_name, last_name, email) VALUES (:first, :last, :email)", map[string]interface{}{
-			"first": "Bin",
-			"last":  "Smuth",
-			"email": "bensmith@allblacks.nz",
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// ensure that if the named param happens right at the end it still works
-		// ensure that NamedQuery works with a map[string]interface{}
-		rows, err = db.NamedQueryContext(ctx, "SELECT * FROM person WHERE first_name=:first", map[string]interface{}{"first": "Bin"})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		ben = &Person{}
-		for rows.Next() {
-			err = rows.StructScan(ben)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if ben.FirstName != "Bin" {
-				t.Fatal("Expected first name of `Bin`, got " + ben.FirstName)
-			}
-			if ben.LastName != "Smuth" {
-				t.Fatal("Expected first name of `Smuth`, got " + ben.LastName)
-			}
-		}
-
 		ben.FirstName = "Ben"
 		ben.LastName = "Smith"
 		ben.Email = "binsmuth@allblacks.nz"
 
 		// Insert via a named query using the struct
-		_, err = db.NamedExecContext(ctx, "INSERT INTO person (first_name, last_name, email) VALUES (:first_name, :last_name, :email)", ben)
+		_, err = db.NamedExec("INSERT INTO person (first_name, last_name, email) VALUES (:first_name, :last_name, :email)", ben)
 
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		rows, err = db.NamedQueryContext(ctx, "SELECT * FROM person WHERE first_name=:first_name", ben)
+		rows, err = db.NamedQuery("SELECT * FROM person WHERE first_name=:first_name", ben)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1002,18 +1162,18 @@ func TestUsageContext(t *testing.T) {
 		}
 		// ensure that Get does not panic on emppty result set
 		person := &Person{}
-		err = db.GetContext(ctx, person, "SELECT * FROM person WHERE first_name=$1", "does-not-exist")
+		err = db.Get(person, "SELECT * FROM person WHERE first_name=$1", "does-not-exist")
 		if err == nil {
 			t.Fatal("Should have got an error for Get on non-existent row.")
 		}
 
 		// lets test prepared statements some more
 
-		stmt, err = db.PreparexContext(ctx, db.Rebind("SELECT * FROM person WHERE first_name=?"))
+		stmt, err = db.Preparex(db.Rebind("SELECT * FROM person WHERE first_name=?"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err = stmt.QueryxContext(ctx, "Ben")
+		rows, err = stmt.Queryx("Ben")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1031,11 +1191,11 @@ func TestUsageContext(t *testing.T) {
 		}
 
 		john = Person{}
-		stmt, err = db.PreparexContext(ctx, db.Rebind("SELECT * FROM person WHERE first_name=?"))
+		stmt, err = db.Preparex(db.Rebind("SELECT * FROM person WHERE first_name=?"))
 		if err != nil {
 			t.Error(err)
 		}
-		err = stmt.GetContext(ctx, &john, "John")
+		err = stmt.Get(&john, "John")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1044,7 +1204,7 @@ func TestUsageContext(t *testing.T) {
 		// THIS USED TO WORK BUT WILL NO LONGER WORK.
 		db.MapperFunc(strings.ToUpper)
 		rsa := CPlace{}
-		err = db.GetContext(ctx, &rsa, "SELECT * FROM capplace;")
+		err = db.Get(&rsa, "SELECT * FROM capplace;")
 		if err != nil {
 			t.Error(err, "in db:", db.DriverName())
 		}
@@ -1054,31 +1214,32 @@ func TestUsageContext(t *testing.T) {
 		// differently from the original.
 		dbCopy := NewDb(db.DB, db.DriverName())
 		dbCopy.MapperFunc(strings.ToUpper)
-		err = dbCopy.GetContext(ctx, &rsa, "SELECT * FROM capplace;")
+		err = dbCopy.Get(&rsa, "SELECT * FROM capplace;")
 		if err != nil {
 			fmt.Println(db.DriverName())
 			t.Error(err)
 		}
 
-		err = db.GetContext(ctx, &rsa, "SELECT * FROM cappplace;")
+		err = db.Get(&rsa, "SELECT * FROM cappplace;")
 		if err == nil {
 			t.Error("Expected no error, got ", err)
 		}
 
 		// test base type slices
 		var sdest []string
-		rows, err = db.QueryxContext(ctx, "SELECT email FROM person ORDER BY email ASC;")
+		rows, err = db.Queryx("SELECT email FROM person ORDER BY email ASC;")
 		if err != nil {
 			t.Error(err)
 		}
-		err = scanAll(rows, &sdest, false)
+		rows.Close()
+		err = db.Select(&sdest, "SELECT email FROM person ORDER BY email ASC;")
 		if err != nil {
 			t.Error(err)
 		}
 
 		// test Get with base types
 		var count int
-		err = db.GetContext(ctx, &count, "SELECT count(*) FROM person;")
+		err = db.Get(&count, "SELECT count(*) FROM person;")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1088,20 +1249,20 @@ func TestUsageContext(t *testing.T) {
 
 		// test Get and Select with time.Time, #84
 		var addedAt time.Time
-		err = db.GetContext(ctx, &addedAt, "SELECT added_at FROM person LIMIT 1;")
+		err = db.Get(&addedAt, "SELECT added_at FROM person LIMIT 1;")
 		if err != nil {
 			t.Error(err)
 		}
 
 		var addedAts []time.Time
-		err = db.SelectContext(ctx, &addedAts, "SELECT added_at FROM person;")
+		err = db.Select(&addedAts, "SELECT added_at FROM person;")
 		if err != nil {
 			t.Error(err)
 		}
 
 		// test it on a double pointer
 		var pcount *int
-		err = db.GetContext(ctx, &pcount, "SELECT count(*) FROM person;")
+		err = db.Get(&pcount, "SELECT count(*) FROM person;")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1111,7 +1272,7 @@ func TestUsageContext(t *testing.T) {
 
 		// test Select...
 		sdest = []string{}
-		err = db.SelectContext(ctx, &sdest, "SELECT first_name FROM person ORDER BY first_name ASC;")
+		err = db.Select(&sdest, "SELECT first_name FROM person ORDER BY first_name ASC;")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1123,7 +1284,7 @@ func TestUsageContext(t *testing.T) {
 		}
 
 		var nsdest []sql.NullString
-		err = db.SelectContext(ctx, &nsdest, "SELECT city FROM place ORDER BY city ASC")
+		err = db.Select(&nsdest, "SELECT city FROM place ORDER BY city ASC")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1135,16 +1296,41 @@ func TestUsageContext(t *testing.T) {
 	})
 }
 
-// tests that sqlx will not panic when the wrong driver is passed because
-// of an automatic nil dereference in sqlx.Open(), which was fixed.
-func TestDoNotPanicOnConnectContext(t *testing.T) {
-	_, err := ConnectContext(context.Background(), "bogus", "hehe")
-	if err == nil {
-		t.Errorf("Should return error when using bogus driverName")
+type Product struct {
+	ProductID int
+}
+
+type Message struct {
+	Text       string      `db:"string"`
+	Properties PropertyMap `db:"properties"` // Stored as JSON in the database
+}
+
+type PropertyMap map[string]string
+
+// Implement driver.Valuer and sql.Scanner interfaces on PropertyMap
+func (p PropertyMap) Value() (driver.Value, error) {
+	if len(p) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(p)
+}
+
+func (p PropertyMap) Scan(src interface{}) error {
+	v := reflect.ValueOf(src)
+	if !v.IsValid() || v.CanAddr() && v.IsNil() {
+		return nil
+	}
+	switch ts := src.(type) {
+	case []byte:
+		return json.Unmarshal(ts, &p)
+	case string:
+		return json.Unmarshal([]byte(ts), &p)
+	default:
+		return fmt.Errorf("Could not not decode type %T -> %T", src, p)
 	}
 }
 
-func TestEmbeddedMapsContext(t *testing.T) {
+func TestEmbeddedMaps(t *testing.T) {
 	var schema = Schema{
 		create: `
 			CREATE TABLE message (
@@ -1154,20 +1340,20 @@ func TestEmbeddedMapsContext(t *testing.T) {
 		drop: `drop table message;`,
 	}
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(schema, t, func(db *DB, t *testing.T, now string) {
 		messages := []Message{
 			{"Hello, World", PropertyMap{"one": "1", "two": "2"}},
 			{"Thanks, Joy", PropertyMap{"pull": "request"}},
 		}
 		q1 := `INSERT INTO message (string, properties) VALUES (:string, :properties);`
 		for _, m := range messages {
-			_, err := db.NamedExecContext(ctx, q1, m)
+			_, err := db.NamedExec(q1, m)
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 		var count int
-		err := db.GetContext(ctx, &count, "SELECT count(*) FROM message")
+		err := db.Get(&count, "SELECT count(*) FROM message")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1176,7 +1362,7 @@ func TestEmbeddedMapsContext(t *testing.T) {
 		}
 
 		var m Message
-		err = db.GetContext(ctx, &m, "SELECT * FROM message LIMIT 1;")
+		err = db.Get(&m, "SELECT * FROM message LIMIT 1;")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1186,7 +1372,7 @@ func TestEmbeddedMapsContext(t *testing.T) {
 	})
 }
 
-func TestIssue197Context(t *testing.T) {
+func TestIssue197(t *testing.T) {
 	// this test actually tests for a bug in database/sql:
 	//   https://github.com/golang/go/issues/13905
 	// this potentially makes _any_ named type that is an alias for []byte
@@ -1198,36 +1384,44 @@ func TestIssue197Context(t *testing.T) {
 	type Var struct{ Raw json.RawMessage }
 	type Var2 struct{ Raw []byte }
 	type Var3 struct{ Raw mybyte }
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
 		var err error
 		var v, q Var
-		if err = db.GetContext(ctx, &v, `SELECT '{"a": "b"}' AS raw`); err != nil {
+		if err = db.Get(&v, `SELECT '{"a": "b"}' AS raw`); err != nil {
 			t.Fatal(err)
 		}
-		if err = db.GetContext(ctx, &q, `SELECT 'null' AS raw`); err != nil {
+		if err = db.Get(&q, `SELECT 'null' AS raw`); err != nil {
 			t.Fatal(err)
 		}
 
 		var v2, q2 Var2
-		if err = db.GetContext(ctx, &v2, `SELECT '{"a": "b"}' AS raw`); err != nil {
+		if err = db.Get(&v2, `SELECT '{"a": "b"}' AS raw`); err != nil {
 			t.Fatal(err)
 		}
-		if err = db.GetContext(ctx, &q2, `SELECT 'null' AS raw`); err != nil {
+		if err = db.Get(&q2, `SELECT 'null' AS raw`); err != nil {
 			t.Fatal(err)
 		}
 
 		var v3, q3 Var3
-		if err = db.QueryRowContext(ctx, `SELECT '{"a": "b"}' AS raw`).Scan(&v3.Raw); err != nil {
+		if err = db.QueryRow(`SELECT '{"a": "b"}' AS raw`).Scan(&v3.Raw); err != nil {
 			t.Fatal(err)
 		}
-		if err = db.QueryRowContext(ctx, `SELECT '{"c": "d"}' AS raw`).Scan(&q3.Raw); err != nil {
+		if err = db.QueryRow(`SELECT '{"c": "d"}' AS raw`).Scan(&q3.Raw); err != nil {
 			t.Fatal(err)
 		}
 		t.Fail()
 	})
 }
 
-func TestInContext(t *testing.T) {
+type Valuer struct {
+	Val string
+}
+
+func (v Valuer) Value() (driver.Value, error) {
+	return v.Val, nil
+}
+
+func TestIn(t *testing.T) {
 	// some quite normal situations
 	type tr struct {
 		q    string
@@ -1241,6 +1435,12 @@ func TestInContext(t *testing.T) {
 		{"SELECT * FROM foo WHERE x in (?)",
 			[]interface{}{[]int{1, 2, 3, 4, 5, 6, 7, 8}},
 			8},
+		{"SELECT * FROM foo WHERE x = ? AND y in (?)",
+			[]interface{}{[]byte("foo"), []int{0, 5, 3}},
+			4},
+		{"SELECT * FROM foo WHERE x = ? AND y IN (?)",
+			[]interface{}{sql.NullString{Valid: false}, []string{"a", "b"}},
+			3},
 	}
 	for _, test := range tests {
 		q, a, err := In(test.q, test.args...)
@@ -1254,6 +1454,24 @@ func TestInContext(t *testing.T) {
 			t.Errorf("Expected %d bindVars, got %d", test.c, strings.Count(q, "?"))
 		}
 	}
+
+	// nil driver.Valuer
+	t.Run("with nil driver.Valuer", func(t *testing.T) {
+		query := `SELECT * FROM foo WHERE x = ? or y IN (?)`
+		_, _, err := In(query,
+			(*Valuer)(nil), // a non-inited pointer to valuer
+			[]interface{}{
+				"a",                 // a usual value
+				nil,                 // a nil value
+				Valuer{Val: "foo"},  // a Valuer
+				&Valuer{Val: "foo"}, // a pointer to valuer
+				(*Valuer)(nil),      // a non-inited pointer to valuer
+			},
+		)
+		if err != nil {
+			t.Error(err)
+		}
+	})
 
 	// too many bindVars, but no slices, so short circuits parsing
 	// i'm not sure if this is the right behavior;  this query/arg combo
@@ -1288,11 +1506,11 @@ func TestInContext(t *testing.T) {
 			t.Error("Expected an error, but got nil.")
 		}
 	}
-	RunWithSchemaContext(context.Background(), defaultSchema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		loadDefaultFixtureContext(ctx, db, t)
-		// tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, city, telcode) VALUES (?, ?, ?)"), "United States", "New York", "1")
-		// tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Hong Kong", "852")
-		// tx.MustExecContext(ctx, tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Singapore", "65")
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
+		// tx.MustExec(tx.Rebind("INSERT INTO place (country, city, telcode) VALUES (?, ?, ?)"), "United States", "New York", "1")
+		// tx.MustExec(tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Hong Kong", "852")
+		// tx.MustExec(tx.Rebind("INSERT INTO place (country, telcode) VALUES (?, ?)"), "Singapore", "65")
 		telcodes := []int{852, 65}
 		q := "SELECT * FROM place WHERE telcode IN(?) ORDER BY telcode"
 		query, args, err := In(q, telcodes)
@@ -1301,7 +1519,7 @@ func TestInContext(t *testing.T) {
 		}
 		query = db.Rebind(query)
 		places := []Place{}
-		err = db.SelectContext(ctx, &places, query, args...)
+		err = db.Select(&places, query, args...)
 		if err != nil {
 			t.Error(err)
 		}
@@ -1317,7 +1535,7 @@ func TestInContext(t *testing.T) {
 	})
 }
 
-func TestEmbeddedLiteralsContext(t *testing.T) {
+func TestEmbeddedLiterals(t *testing.T) {
 	var schema = Schema{
 		create: `
 			CREATE TABLE x (
@@ -1326,7 +1544,7 @@ func TestEmbeddedLiteralsContext(t *testing.T) {
 		drop: `drop table x;`,
 	}
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
+	RunWithSchema(schema, t, func(db *DB, t *testing.T, now string) {
 		type t1 struct {
 			K *string
 		}
@@ -1337,10 +1555,10 @@ func TestEmbeddedLiteralsContext(t *testing.T) {
 			K *string
 		}
 
-		db.MustExecContext(ctx, db.Rebind("INSERT INTO x (k) VALUES (?), (?), (?);"), "one", "two", "three")
+		db.MustExec(db.Rebind("INSERT INTO x (k) VALUES (?), (?), (?);"), "one", "two", "three")
 
 		target := t1{}
-		err := db.GetContext(ctx, &target, db.Rebind("SELECT * FROM x WHERE k=?"), "one")
+		err := db.Get(&target, db.Rebind("SELECT * FROM x WHERE k=?"), "one")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1349,7 +1567,7 @@ func TestEmbeddedLiteralsContext(t *testing.T) {
 		}
 
 		target2 := t2{}
-		err = db.GetContext(ctx, &target2, db.Rebind("SELECT * FROM x WHERE k=?"), "one")
+		err = db.Get(&target2, db.Rebind("SELECT * FROM x WHERE k=?"), "one")
 		if err != nil {
 			t.Error(err)
 		}
@@ -1359,84 +1577,34 @@ func TestEmbeddedLiteralsContext(t *testing.T) {
 	})
 }
 
-func TestConn(t *testing.T) {
-	var schema = Schema{
-		create: `
-			CREATE TABLE tt_conn (
-				id integer,
-				value text NULL DEFAULT NULL
-			);`,
-		drop: "drop table tt_conn;",
-	}
+func TestSelectReset(t *testing.T) {
+	RunWithSchema(defaultSchema, t, func(db *DB, t *testing.T, now string) {
+		loadDefaultFixture(db, t)
 
-	RunWithSchemaContext(context.Background(), schema, t, func(ctx context.Context, db *DB, t *testing.T) {
-		conn, err := db.Connx(ctx)
-		defer conn.Close() //lint:ignore SA5001 it's OK to ignore this here.
+		filledDest := []string{"a", "b", "c"}
+		err := db.Select(&filledDest, "SELECT first_name FROM person ORDER BY first_name ASC;")
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		_, err = conn.ExecContext(ctx, conn.Rebind(`INSERT INTO tt_conn (id, value) VALUES (?, ?), (?, ?)`), 1, "a", 2, "b")
-		if err != nil {
-			t.Fatal(err)
+		if len(filledDest) != 2 {
+			t.Errorf("Expected 2 first names, got %d.", len(filledDest))
 		}
-
-		type s struct {
-			ID    int    `db:"id"`
-			Value string `db:"value"`
-		}
-
-		v := []s{}
-
-		err = conn.SelectContext(ctx, &v, "SELECT * FROM tt_conn ORDER BY id ASC")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if v[0].ID != 1 {
-			t.Errorf("Expecting ID of 1, got %d", v[0].ID)
-		}
-
-		v1 := s{}
-		err = conn.GetContext(ctx, &v1, conn.Rebind("SELECT * FROM tt_conn WHERE id=?"), 1)
-
-		if err != nil {
-			t.Fatal(err)
-		}
-		if v1.ID != 1 {
-			t.Errorf("Expecting to get back 1, but got %v\n", v1.ID)
-		}
-
-		stmt, err := conn.PreparexContext(ctx, conn.Rebind("SELECT * FROM tt_conn WHERE id=?"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		v1 = s{}
-		tx, err := conn.BeginTxx(ctx, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		tstmt := tx.Stmtx(stmt)
-		row := tstmt.QueryRowx(1)
-		err = row.StructScan(&v1)
-		if err != nil {
-			t.Error(err)
-		}
-		tx.Commit()
-		if v1.ID != 1 {
-			t.Errorf("Expecting to get back 1, but got %v\n", v1.ID)
-		}
-
-		rows, err := conn.QueryxContext(ctx, "SELECT * FROM tt_conn")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for rows.Next() {
-			err = rows.StructScan(&v1)
-			if err != nil {
-				t.Fatal(err)
+		expected := []string{"Jason", "John"}
+		for i, got := range filledDest {
+			if got != expected[i] {
+				t.Errorf("Expected %d result to be %s, but got %s.", i, expected[i], got)
 			}
+		}
+
+		var emptyDest []string
+		err = db.Select(&emptyDest, "SELECT first_name FROM person WHERE first_name = 'Jack';")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Verify that selecting 0 rows into a nil target didn't create a
+		// non-nil slice.
+		if emptyDest != nil {
+			t.Error("Expected emptyDest to be nil")
 		}
 	})
 }
