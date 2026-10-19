@@ -4,7 +4,11 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
-## Unreleased
+## v1.4.2 (2026-10-19)
+
+No API change. sqlx's `go.mod` now requires no other module, so importing sqlx
+no longer changes which database driver versions a program builds with, and the
+upstream tags that came with the fork's history are retracted.
 
 ### Module and toolchain
 
@@ -15,7 +19,25 @@ upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
   minimum version selection raised a consumer's own MySQL driver to v1.10.1
   even though sqlx only used it in tests (upstream #642, #569, #849). The
   checks in three tests that read the unexported `unsafe` field now test its
-  effect instead: scanning into a struct that lacks some selected columns.
+  effect instead: scanning into a struct that lacks some selected columns
+  (#34).
+- v1.2.0 to v1.4.0 are retracted under this module path. They are upstream's
+  tags, pushed with the history; their `go.mod` declares
+  `github.com/jmoiron/sqlx`, so `go get github.com/secondwindoss/sqlx@v1.4.0`
+  failed with a module path error. `go list -m -versions` now lists only the
+  fork's own releases (#35).
+
+### Project
+
+- Release tags are signed; GitHub shows them as verified.
+- An OpenSSF Scorecard workflow publishes the repository's score, shown as a
+  README badge; CI actions are pinned by commit SHA; Go fuzz tests cover the
+  SQL scanner, `Rebind`, `compileNamedQuery` and `In`, and their seed corpus
+  runs with the unit tests (#32, #33). CodeQL scans every pull request, and
+  merging into `master` requires the CI checks to pass.
+- The README is rewritten around the fork, with a migration section that
+  explains why a `replace` directive cannot stand in for the import rewrite
+  (#28, #29, #30).
 
 ## v1.4.1 (2026-10-10)
 
