@@ -279,6 +279,30 @@ WHERE t.id = u.id
 			expect: `INSERT INTO foo (a,b) settings async_insert=1, wait_for_async_insert=1 VALUES(:a, :b),(:a, :b)`,
 			loop:   2,
 		},
+		{
+			name:   `bracket inside a string literal in the group`,
+			query:  `INSERT INTO foo (a,b) VALUES (?, ')')`,
+			expect: `INSERT INTO foo (a,b) VALUES (?, ')'),(?, ')')`,
+			loop:   2,
+		},
+		{
+			name:   `opening bracket inside a string literal in the group`,
+			query:  `INSERT INTO foo (a,b) VALUES (?, '(') RETURNING id`,
+			expect: `INSERT INTO foo (a,b) VALUES (?, '('),(?, '(') RETURNING id`,
+			loop:   2,
+		},
+		{
+			name:   `bracket inside a comment in the group`,
+			query:  "INSERT INTO foo (a,b) VALUES (?, /* ) */ ?)",
+			expect: "INSERT INTO foo (a,b) VALUES (?, /* ) */ ?),(?, /* ) */ ?)",
+			loop:   2,
+		},
+		{
+			name:   `unclosed group is left unchanged`,
+			query:  `INSERT INTO foo (a,b) VALUES (?, ?`,
+			expect: `INSERT INTO foo (a,b) VALUES (?, ?`,
+			loop:   2,
+		},
 	}
 
 	for _, tc := range table {
@@ -288,5 +312,53 @@ WHERE t.id = u.id
 				t.Errorf("mismatched results")
 			}
 		})
+	}
+}
+
+// A batch insert whose VALUES group never closes is an error, whatever the
+// number of rows, instead of SQL that fails later at the database.
+func TestBindArrayUnclosedValues(t *testing.T) {
+	type contact struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+	one := []contact{{1, "Bob"}}
+	two := []contact{{1, "Bob"}, {2, "Cat"}}
+	for _, tc := range []struct {
+		name  string
+		query string
+		arg   interface{}
+	}{
+		{"one row", `INSERT INTO foo (id, name) VALUES(:id, :name`, one},
+		{"two rows", `INSERT INTO foo (id, name) VALUES(:id, :name`, two},
+		{"pointer to slice", `INSERT INTO foo (id, name) VALUES (:id, :name`, &two},
+		{"bracket in a literal", `INSERT INTO foo (id, name) VALUES (:id, :name, '('`, two},
+		{"closed group without binds", `INSERT INTO foo (id, name) VALUES () VALUES (:id, :name`, two},
+	} {
+		for _, bt := range []int{QUESTION, DOLLAR} {
+			q, args, err := BindNamed(bt, tc.query, tc.arg)
+			if err != errUnclosedValues || err.Error() != "missing closing bracket in VALUES" {
+				t.Errorf("%s (bind type %d): got q=%q args=%d err=%v, want %v", tc.name, bt, q, len(args), err, errUnclosedValues)
+			}
+		}
+	}
+
+	// Unchanged: balanced groups, queries without VALUES, and single-struct or
+	// map arguments, which do not take the batch path.
+	for _, tc := range []struct {
+		name, query, want string
+		arg               interface{}
+	}{
+		{"balanced", `INSERT INTO foo (id, name) VALUES (:id, :name)`, `INSERT INTO foo (id, name) VALUES (?, ?),(?, ?)`, two},
+		{"literal bracket", `INSERT INTO foo (id, name) VALUES (:id, ')')`, `INSERT INTO foo (id, name) VALUES (?, ')'),(?, ')')`, two},
+		{"upsert with VALUES(col)", `INSERT INTO foo (id, name) VALUES (:id, :name) ON DUPLICATE KEY UPDATE name = VALUES(name`, `INSERT INTO foo (id, name) VALUES (?, ?),(?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name`, two},
+		{"no VALUES", `UPDATE foo SET name = :name WHERE id = :id`, `UPDATE foo SET name = ? WHERE id = ?`, one},
+		{"struct", `INSERT INTO foo (id, name) VALUES(:id, :name`, `INSERT INTO foo (id, name) VALUES(?, ?`, contact{1, "Bob"}},
+		{"map", `INSERT INTO foo (id, name) VALUES(:id, :name`, `INSERT INTO foo (id, name) VALUES(?, ?`, map[string]interface{}{"id": 1, "name": "Bob"}},
+	} {
+		q, _, err := BindNamed(QUESTION, tc.query, tc.arg)
+		if err != nil || q != tc.want {
+			t.Errorf("%s: got q=%q err=%v, want %q", tc.name, q, err, tc.want)
+		}
 	}
 }

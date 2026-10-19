@@ -91,62 +91,60 @@ func (s *sqlScanner) next() (kind tokKind, start, end int) {
 				return tokName, i, j
 			}
 			i++ // ':=' , ' : ', ':1', ':)' ... are plain text
-		case '\'':
-			// E'...' (Postgres escape string): backslash escapes are certain.
-			esc := i > 0 && (q[i-1] == 'E' || q[i-1] == 'e') && (i < 2 || !isIdentByte(q[i-2]))
-			if j, ok := scanQuoted(q, i+1, '\'', esc); ok {
-				i = j
-			} else {
-				i++ // unterminated: not a string after all, treat the quote as text
-			}
-		case '"':
-			if j, ok := scanQuoted(q, i+1, '"', false); ok {
-				i = j
-			} else {
-				i++
-			}
-		case '`':
-			if j, ok := scanBacktick(q, i+1); ok {
-				i = j
-			} else {
-				i++
-			}
-		case '[':
-			if s.opt&optBrackets != 0 {
-				if j, ok := scanBracket(q, i+1); ok {
-					i = j
-					continue
-				}
-			}
-			i++
-		case '-':
-			if i+1 < n && q[i+1] == '-' {
-				if j := strings.IndexByte(q[i:], '\n'); j >= 0 {
-					i += j + 1
-				} else {
-					i = n
-				}
-			} else {
-				i++
-			}
-		case '/':
-			if i+1 < n && q[i+1] == '*' {
-				i = skipBlockComment(q, i+2)
-			} else {
-				i++
-			}
-		case '$':
-			if i == 0 || !isIdentByte(q[i-1]) {
-				if j, ok := scanDollarQuote(q, i); ok {
-					i = j
-					continue
-				}
-			}
-			i++
+		default:
+			i = skipOpaque(q, i, s.opt)
 		}
 	}
 	s.pos = n
 	return tokEOF, n, n
+}
+
+// skipOpaque returns the offset just past the string literal, quoted
+// identifier, comment or dollar-quoted string that starts at q[i], or i+1 when
+// nothing opaque starts there (or it is unterminated, in which case the opening
+// byte is plain text). Brackets are opaque only with optBrackets.
+func skipOpaque(q string, i int, opt scanOpts) int {
+	n := len(q)
+	switch q[i] {
+	case '\'':
+		// E'...' (Postgres escape string): backslash escapes are certain.
+		esc := i > 0 && (q[i-1] == 'E' || q[i-1] == 'e') && (i < 2 || !isIdentByte(q[i-2]))
+		if j, ok := scanQuoted(q, i+1, '\'', esc); ok {
+			return j
+		}
+	case '"':
+		if j, ok := scanQuoted(q, i+1, '"', false); ok {
+			return j
+		}
+	case '`':
+		if j, ok := scanBacktick(q, i+1); ok {
+			return j
+		}
+	case '[':
+		if opt&optBrackets != 0 {
+			if j, ok := scanBracket(q, i+1); ok {
+				return j
+			}
+		}
+	case '-':
+		if i+1 < n && q[i+1] == '-' {
+			if j := strings.IndexByte(q[i:], '\n'); j >= 0 {
+				return i + j + 1
+			}
+			return n
+		}
+	case '/':
+		if i+1 < n && q[i+1] == '*' {
+			return skipBlockComment(q, i+2)
+		}
+	case '$':
+		if i == 0 || !isIdentByte(q[i-1]) {
+			if j, ok := scanDollarQuote(q, i); ok {
+				return j
+			}
+		}
+	}
+	return i + 1
 }
 
 // scanQuoted scans a '...' or "..." literal whose opening quote is at i-1.

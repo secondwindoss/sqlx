@@ -237,63 +237,85 @@ func bindStruct(bindType int, query string, arg interface{}, m *reflectx.Mapper)
 
 var valuesReg = regexp.MustCompile(`(?i)\WVALUES\s*\(`)
 
-func findMatchingClosingBracketIndex(s string) int {
-	count := 0
-	for i, ch := range s {
-		if ch == '(' {
-			count++
-		}
-		if ch == ')' {
-			count--
-			if count == 0 {
+// errUnclosedValues is returned when a batch insert's VALUES group, the one
+// holding the bind variables, has no closing bracket.
+var errUnclosedValues = errors.New("missing closing bracket in VALUES")
+
+// matchingCloseParen returns the index of the ')' that closes the '(' at
+// q[open], or -1 when there is none. Brackets inside string literals, quoted
+// identifiers, comments and dollar-quoted strings are skipped.
+func matchingCloseParen(q string, open int) int {
+	depth := 0
+	for i := open; i < len(q); {
+		switch q[i] {
+		case '(':
+			depth++
+			i++
+		case ')':
+			depth--
+			if depth == 0 {
 				return i
 			}
+			i++
+		case '\'', '"', '`', '-', '/', '$':
+			i = skipOpaque(q, i, 0)
+		default:
+			i++
 		}
 	}
-	return 0
+	return -1
 }
 
-// fixBound repeats the VALUES group of a batch insert loop-1 more times.
-// The group chosen is the first one that contains a bind variable, so that a
-// table named "values" or MySQL's VALUES(col) in an ON DUPLICATE KEY UPDATE
-// clause is not mistaken for it. When no group contains a bind variable the
-// first match is used, as before.
-func fixBound(bound string, loop int) string {
-	locs := valuesReg.FindAllStringIndex(bound, -1)
-	// defensive guard when "VALUES (...)" not found
-	if len(locs) == 0 {
-		return bound
-	}
-
-	chosen := 0
-	for i, loc := range locs {
-		openingBracketIndex := loc[1] - 1
-		index := findMatchingClosingBracketIndex(bound[openingBracketIndex:])
-		if index == 0 {
+// valuesGroup finds the VALUES group of a batch insert and returns the indexes
+// of its brackets. The group is the first one whose brackets close and that
+// contains a bind variable, so that a table named "values" or MySQL's
+// VALUES(col) in an ON DUPLICATE KEY UPDATE clause is not mistaken for it;
+// when no closed group contains a bind variable the first closed group is
+// used. ok is false when the query has no closed VALUES group. err is
+// errUnclosedValues when no closed group holds a bind variable but an
+// unclosed one does.
+func valuesGroup(bound string) (openIdx, closeIdx int, ok bool, err error) {
+	unclosedBind := false
+	for _, loc := range valuesReg.FindAllStringIndex(bound, -1) {
+		o := loc[1] - 1
+		c := matchingCloseParen(bound, o)
+		if c < 0 {
+			if strings.ContainsAny(bound[o:], "?$:@") {
+				unclosedBind = true
+			}
 			continue
 		}
-		if strings.ContainsAny(bound[openingBracketIndex:openingBracketIndex+index+1], "?$:@") {
-			chosen = i
-			break
+		if strings.ContainsAny(bound[o:c+1], "?$:@") {
+			return o, c, true, nil
+		}
+		if !ok {
+			openIdx, closeIdx, ok = o, c, true
 		}
 	}
+	if unclosedBind {
+		return 0, 0, false, errUnclosedValues
+	}
+	return openIdx, closeIdx, ok, nil
+}
 
-	openingBracketIndex := locs[chosen][1] - 1
-	index := findMatchingClosingBracketIndex(bound[openingBracketIndex:])
-	// defensive guard. must have closing bracket
-	if index == 0 {
+// fixBound repeats the VALUES group of a batch insert loop-1 more times. A
+// query without a usable VALUES group is returned unchanged; bindArray rejects
+// an unclosed group before it gets here.
+func fixBound(bound string, loop int) string {
+	openIdx, closeIdx, ok, err := valuesGroup(bound)
+	if !ok || err != nil {
 		return bound
 	}
-	closingBracketIndex := openingBracketIndex + index + 1
+	end := closeIdx + 1
 
 	var buffer bytes.Buffer
 
-	buffer.WriteString(bound[0:closingBracketIndex])
+	buffer.WriteString(bound[0:end])
 	for i := 0; i < loop-1; i++ {
 		buffer.WriteString(",")
-		buffer.WriteString(bound[openingBracketIndex:closingBracketIndex])
+		buffer.WriteString(bound[openIdx:end])
 	}
-	buffer.WriteString(bound[closingBracketIndex:])
+	buffer.WriteString(bound[end:])
 	return buffer.String()
 }
 
@@ -318,6 +340,9 @@ func bindArray(bindType int, query string, arg interface{}, m *reflectx.Mapper) 
 			return "", []interface{}{}, err
 		}
 		arglist = append(arglist, elemArglist...)
+	}
+	if _, _, _, err := valuesGroup(bound); err != nil {
+		return "", []interface{}{}, err
 	}
 	if arrayLen > 1 {
 		bound = fixBound(bound, arrayLen)
