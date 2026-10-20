@@ -4,7 +4,7 @@ Notable changes to this fork, newest first. An entry that imports an upstream
 pull request names its number and author. Releases up to v1.4.0 are releases of
 upstream [jmoiron/sqlx](https://github.com/jmoiron/sqlx).
 
-## v1.4.3 (2026-10-19)
+## v1.4.3 (2026-10-20)
 
 No API change. Batch inserts report an unclosed `VALUES (` group instead of
 producing SQL the database rejects, and expand correctly when the group holds a
